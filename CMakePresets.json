@@ -1,0 +1,91 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 28, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "dev",
+      "displayName": "Debug",
+      "description": "Debug development build: the TDD red-green loop preset; exports compile_commands.json for clang-tidy",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/dev",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "rel",
+      "displayName": "Release",
+      "description": "-O3 -g -DNDEBUG; -g feeds perf --call-graph dwarf, no codegen change",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/rel",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_FLAGS_RELEASE": "-O3 -g -DNDEBUG"
+      }
+    },
+    {
+      "name": "asan",
+      "displayName": "Address+UB sanitizers",
+      "description": "-O1 -g ASan+UBSan; -fno-sanitize-recover=all so any UB hit fails the run instead of logging past it",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/asan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "",
+        "CMAKE_CXX_FLAGS": "-O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined"
+      }
+    },
+    {
+      "name": "tsan",
+      "displayName": "Thread sanitizer",
+      "description": "-O1 -g TSan; gains real work at (SPSC telemetry ring producer/consumer stress)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/tsan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "",
+        "CMAKE_CXX_FLAGS": "-O1 -g -fsanitize=thread",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=thread"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "dev", "configurePreset": "dev" },
+    { "name": "rel", "configurePreset": "rel" },
+    { "name": "asan", "configurePreset": "asan" },
+    { "name": "tsan", "configurePreset": "tsan" }
+  ],
+  "testPresets": [
+    {
+      "name": "correctness-base",
+      "hidden": true,
+      "description": "Shared base for every CORRECTNESS test preset: the wall-clock-bounded `perf` label is excluded exactly ONCE here. Copy-pasting that filter per preset made the safety property opt-out-per-preset — one forgotten line in a future sanitizer/CI preset silently re-arms a timing test inside a correctness gate, and it passes almost always.",
+      "output": { "outputOnFailure": true },
+      "filter": { "exclude": { "label": "perf" } }
+    },
+    {
+      "name": "dev",
+      "configurePreset": "dev",
+      "inherits": "correctness-base"
+    },
+    {
+      "name": "rel",
+      "configurePreset": "rel",
+      "inherits": "correctness-base"
+    },
+    {
+      "name": "asan",
+      "configurePreset": "asan",
+      "inherits": "correctness-base",
+      "environment": { "UBSAN_OPTIONS": "print_stacktrace=1:halt_on_error=1" }
+    },
+    {
+      "name": "tsan",
+      "configurePreset": "tsan",
+      "inherits": "correctness-base"
+    },
+    {
+      "name": "perf",
+      "configurePreset": "rel",
+      "output": { "outputOnFailure": true },
+      "filter": { "include": { "label": "perf" } }
+    }
+  ]
+}

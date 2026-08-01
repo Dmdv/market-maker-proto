@@ -1,0 +1,29 @@
+# macOS
+.DS_Store
+
+# Build trees
+build/
+cmake-build-*/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.coverage
+.coverage.*
+
+# Editor / tooling
+.cache/
+.pytest_cache/
+compile_commands.json
+
+# Local tool artifacts
+.session/
+
+# The engine defaults its telemetry to CWD when --telemetry-out is omitted, so a bare
+# `./build/rel/mm_engine --feed ...` run drops this in the repo root. No shipped script does
+# that (demo.sh and the test fixture both pass an explicit path), but a reviewer trying the
+# binary by hand would, and it must not become a committable artifact.
+telemetry.jsonl
+.tg-inbox/

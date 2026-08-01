@@ -1,0 +1,158 @@
+[build-system]
+requires = ["setuptools>=68,<81"]  # upper bound: reproducible builds (pinned for reproducible builds)
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mmclient"
+# Single source of truth: mmclient/__init__.py __version__ (setuptools dynamic attr below).
+dynamic = ["version"]
+description = "Market-making client over WebSocket: one sans-IO strategy core, naive + tuned transport stacks"
+requires-python = ">=3.11"
+# msgspec is a BASE dependency, not a `tuned` one: its Structs are the single Python
+# source of truth for the wire (the design) and BOTH codec arms return them, so the naive
+# arm cannot import `mmclient.protocol` without it. Only the transport/codec CHOICE is
+# the measured A/B — picows and uvloop stay in `tuned`.
+dependencies = ["websockets==16.1.1", "msgspec==0.21.1"]
+
+[project.optional-dependencies]
+# ruff and mypy are dev dependencies, not conveniences: scripts/verify_linux.sh runs both
+# inside the pinned image, so an unpinned or absent tool would mean the Python half of the
+# tree is linted by whatever the reviewer's host happens to have — the asymmetry the C++
+# half does not have (.clang-format / .clang-tidy, enforced at the sanitizer gate).
+dev = [
+  "pytest==9.1.1",
+  "pytest-asyncio==1.4.0",
+  "ruff==0.15.22",
+  "mypy==1.20.2",
+  # Same argument one step further (review finding): the task's coverage figure was quoted in
+  # a review comment and reproducible nowhere, so it could neither be checked nor protect
+  # the suite from regressing. `scripts/verify_linux.sh` now ASSERTS it in the same run
+  # that asserts lint and types, against the threshold in [tool.coverage.report] below.
+  "coverage==7.15.2",
+]
+tuned = ["picows==2.1.1", "uvloop==0.22.1"]
+
+[project.scripts]
+mm-client = "mmclient.app:main"
+
+[tool.setuptools.packages.find]
+include = ["mmclient*"]
+
+[tool.setuptools.dynamic]
+version = { attr = "mmclient.__version__" }
+
+# --- tooling: the `python-guidelines` Strict tier, the Python half of the sanitizer gate's gate ----
+
+[tool.ruff]
+line-length = 100 # matches .clang-format's ColumnLimit: one column budget for the repo
+# Stated, not inferred. Left unset, ruff resolves its target from `requires-python` above
+# and lints for 3.11 (MEASURED: `ruff check --show-settings .` reported
+# `linter.unresolved_target_version = 3.11`), while the project runs only on 3.14 — the
+# venv is 3.14.6 and scripts/verify_linux.sh hard-fails the container unless
+# `python3.14 --version` matches. A 3.11 target means `UP` never proposes a 3.12+ idiom and
+# any 3.12+ syntax a later task writes is reported as an error by the very gate that is
+# supposed to be the 3.14 one. The `requires-python` floor is a PACKAGING claim (the design's
+# the container gate tests it) and deliberately not restated here; see the known limitations.
+target-version = "py314"
+
+[tool.ruff.lint]
+select = [
+  "E", "F", "W", "I", "B", "C4", "UP", "SIM", "N", "RUF",
+  "PERF", "PL", "PTH", "T20", "TRY", "PIE", "RSE", "RET",
+  "FLY", "FURB", "LOG", "G",
+]
+
+ignore = [
+  # TRY003 wants rejection text to move into exception subclasses. It is wrong for this
+  # tree: a codec's rejection MESSAGE is contract surface (both arms are pinned to emit
+  # identical text for the same frame — `assert_one_wording` (python/tests/protocol_support.py),
+  # applied across test_preflight.py, test_protocol.py and test_decode_fields.py over the
+  # preflight's verdicts AND the schema pass's, the latter being why `decode` restates
+  # msgspec's ValidationError instead of letting it out), and it belongs at the
+  # site that knows the reason. Every caller catches `ValueError` by the module's documented
+  # contract, so a per-reason subclass would buy no caller anything and would separate
+  # the contract text from the decision that produces it.
+  "TRY003",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["mmclient"]
+
+[tool.ruff.lint.per-file-ignores]
+# A test states expected values inline — that is what a pin IS. PLC0415 joins it because a
+# test that monkeypatches a module must import it INSIDE the case: a top-level import binds
+# the name before the patch and the case would silently exercise the unpatched module.
+"tests/**" = ["PLR2004", "PLC0415"]
+# `bench/probes/` is a command-line probe whose OUTPUT is its product: `print` is its
+# interface, not a leftover debug statement, so T201 is exempted there and nowhere else.
+# Scoped to that directory rather than dropped from `select`, which would also stop
+# reporting a stray print in `mmclient/` — where one really would be a defect. The path is
+# relative to THIS file's directory, which is how ruff resolves per-file patterns, and the
+# probe is outside it because both tools take their configuration from the directory they
+# are invoked in; `scripts/verify_linux.sh` names the probe explicitly for that reason.
+"../bench/probes/**" = ["T201"]
+# The benchmark harness is the same case as the probes: `summarize.py`'s tables ARE its output, and
+# `run_bench.py` narrates a run an operator is watching.
+# PLR0913 on `manifest.capture`: its arguments are all KEYWORD-ONLY and each one is a field
+# a reader needs to reproduce the run, so collapsing them into a dict would hide the
+# contract rather than simplify it.
+"../bench/harness/**" = ["T201", "PLR0913"]
+# run_client's parameters past `strategy` are ALL keyword-only, so the count is not a call-site
+# burden, which is what PLR0913 exists to prevent. `timer_interval_s` was added because the
+# harness paces its probe through the SAME session loop as the shipped arms rather than growing
+# a second one — a duplicated session loop is the far worse trade, and the reason `_session.py`
+# exists at all.
+"mmclient/ws_naive.py" = ["PLR0913"]
+"mmclient/ws_picows.py" = ["PLR0913"]
+# `mmclient/app.py` is the CLI entry point — its stdout and stderr ARE its interface, by the
+# same argument as the probe above, and the user-facing lines are a documented part of
+# the demo. Scoped to the one file so a stray print anywhere else in `mmclient/` is still a
+# defect. PLC0415 is exempted with it: the tuned imports are deliberately deferred so a
+# naive-only install (picows and uvloop are the `tuned` extra) can still run the naive arm.
+"mmclient/app.py" = ["T201", "PLC0415"]
+
+[tool.mypy]
+# Stated for the same reason as ruff's target above, though the failure mode differs: mypy
+# does NOT read `requires-python` — left unset it takes the version of the interpreter
+# RUNNING it (measured: a clean `--cache-dir` run wrote `3.14/`), so the checked semantics
+# would silently follow whichever Python a reviewer invoked mypy with. Pinned, the gate
+# checks 3.14 semantics on every host, container or not.
+python_version = "3.14"
+strict = true
+warn_unused_ignores = true
+show_error_codes = true
+# `bench/` is a sibling of `python/`, so the benchmark harness is not on the path mypy builds from
+# this file's directory. Listed here rather than left to a per-module ignore: the harness is
+# first-party code that computes every published percentile, and excusing it from type checking
+# to save a config line would be the wrong trade.
+mypy_path = "../bench"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers --strict-config"
+# auto: the hardening suite drives real event loops against an in-test WS
+# server, and marking every one of those coroutines by hand is a decoration nobody
+# checks — a forgotten marker silently SKIPS the case rather than failing it.
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+# BRANCH coverage, not line: the codec is a wall of guards, and a line-only figure counts
+# a guard as covered the moment its false arm runs — the accept side of a cap and the
+# reject side of it are the same line. Measured on the shipped tree by the same command
+# `scripts/verify_linux.sh` runs (`coverage run -m pytest tests && coverage report`):
+# 576 statements / 218 branches, all reached (added strategy.py).
+branch = true
+source = ["mmclient"]
+
+[tool.coverage.report]
+# The threshold is the measurement, not an aspiration, and it is a RATCHET: a later task
+# that cannot reach it must lower this number deliberately and say why, rather than let a
+# figure quoted in a review comment quietly stop being true. `# pragma: no cover` is
+# honoured (coverage's default exclusion) and every use in `mmclient` carries its reason —
+# deliberately stated without a COUNT, because the count is what went stale here: it said
+# "twice" while the tree held five, in the very comment whose subject is figures that
+# quietly stop being true. A rule that cannot survive its own example is the wrong rule.
+# `# pragma: no branch` is used once (strategy.py, the closed EngineMsg union) and is a
+# different directive: it excludes an unreachable ARC, not a line.
+fail_under = 100
+show_missing = true

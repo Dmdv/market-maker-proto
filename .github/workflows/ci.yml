@@ -1,0 +1,34 @@
+# The authoritative gate, on a NATIVE x86-64 runner.
+#
+# Why this file is ~20 lines and delegates everything: `scripts/verify_linux.sh` already builds
+# the pinned ubuntu:26.04 image and runs `make container-gate` inside it. Re-expressing those
+# steps here would create a second definition of the gate that drifts from the first — which is
+# the exact failure this repository spent a day removing from its own scripts.
+#
+# GitHub's ubuntu-latest runners are native x86-64, so this is REAL target-arch evidence
+# fallback for a developer without an x86-64 host (record E-8, audit ).
+name: verify
+
+# QUOTED deliberately. YAML 1.1 lists `on` among its boolean literals, so an unquoted key parses
+# as `True` in PyYAML and any other 1.1 loader — GitHub's own parser reads it as the string, but a
+# workflow that only validates under one parser is a workflow whose linting is a coin flip.
+"on":
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify-linux:
+    runs-on: ubuntu-latest
+    # The image build plus a four-stage gate; generous because a timeout that fires on a slow
+    # runner reads as a failure and teaches people to ignore red.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # check_doc_refs.py resolves references through `git ls-files`, so a shallow clone
+          # without the full index would change what the gate checks.
+          fetch-depth: 0
+      # No --platform: bare invocation targets the runner's native arch, which is the point.
+      - name: verify_linux.sh (image build + container-gate + toolchain asserts)
+        run: scripts/verify_linux.sh

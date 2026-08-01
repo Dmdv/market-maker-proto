@@ -1,0 +1,1 @@
+{"t":"reject","v":1,"seq":10,"epoch":2,"cl_id":"","code":"TICK_SIZE","reason":"px not a multiple of tick_size"}

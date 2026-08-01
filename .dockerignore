@@ -1,0 +1,20 @@
+# Keep the image build context to sources only — host build trees and venvs must never
+# leak into the authoritative container (macOS artifacts would poison the Linux build).
+# Docker matches patterns against the context-root-relative path (Go filepath.Match, NOT
+# recursive like .gitignore) — Python artifacts appear at any depth (python/mmclient/
+# __pycache__, python/mmclient.egg-info, ...), so those need the **/ prefix (review finding).
+build/
+cmake-build-*/
+.venv/
+**/__pycache__/
+**/*.egg-info/
+**/.pytest_cache/
+# ruff/mypy caches are host-keyed (macOS, a different interpreter): copying them in would
+# hand the container's `ruff check` / `mypy` run a cache built for another platform.
+**/.ruff_cache/
+**/.mypy_cache/
+# Coverage data files are interpreter- and path-keyed; the container writes its own.
+**/.coverage
+.session/
+.git/
+**/.DS_Store
