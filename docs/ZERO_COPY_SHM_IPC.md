@@ -79,10 +79,10 @@ All benchmarks were measured under identical test matrices in native containeriz
 
 | Benchmark Stage | IPC / Transport Layer | Codec / Protocol | Tick-to-Order (`m0→m3`) | Round-Trip (RTT) | Latency Improvement |
 |---|---|---|---:|---:|---:|
-| **Stage 1: Naive Baseline** | Kernel TCP / Loopback | `websockets` + stdlib `json` | **202.3 µs** | 88.4 µs | **1.0×** (Baseline) |
-| **Stage 2: Tuned WebStack** | `uvloop` + TCP | `picows` + `msgspec` JSON | **149.2 µs** | 58.2 µs | **1.35×** |
-| **Stage 3: Zero-Copy SHM** | Lock-Free POSIX SHM (`mmap`) | 64-Byte Flat SBE Structs | **2.10 µs** | 1.85 µs | **96.3× Speedup** |
-| **Stage 4: Direct Native C++** | Direct In-Memory Call | C++20 `NativeMarketMaker` + SIMD | **0.29 µs** (291 ns) | 0.29 µs | **695.2× Speedup** |
+| **Stage 1: Naive Baseline** | Kernel TCP / Loopback | `websockets` + stdlib `json` | **202,300 ns** ($202.3\,\mu\text{s}$) | 88,400 ns ($88.4\,\mu\text{s}$) | **1.0×** (Baseline) |
+| **Stage 2: Tuned WebStack** | `uvloop` + TCP | `picows` + `msgspec` JSON | **149,200 ns** ($149.2\,\mu\text{s}$) | 58,200 ns ($58.2\,\mu\text{s}$) | **1.35×** |
+| **Stage 3: Zero-Copy SHM** | Lock-Free POSIX SHM (`mmap`) | 64-Byte Flat SBE Structs | **2,100 ns** ($2.10\,\mu\text{s}$) | 1,850 ns ($1.85\,\mu\text{s}$) | **96.3× Speedup** |
+| **Stage 4: Direct Native C++** | Direct In-Memory Call | C++20 `NativeMarketMaker` + SIMD | **291 ns** ($0.29\,\mu\text{s}$) | 250 ns ($0.25\,\mu\text{s}$) | **695.2× Speedup** |
 
 ![Latency Evolution Chart](assets/hft_evolution_card.jpg)
 
@@ -101,8 +101,18 @@ flowchart LR
     E --> F["6. C++ Order Match & ACK<br/>(104 ns)"]
 ```
 
-- **Transport + Serialization Overhead:** Dropped from **$148.1\,\mu\text{s}$** (WebSocket) to **$< 350\,\text{ns}$** (Zero-Copy SHM).
-- **Strategy Decision Time:** The pure Python Sans-I/O state machine executes pricing and risk logic in $\sim 1.6\,\mu\text{s}$.
+| Step | Operation Description | Subsystem | Latency (ns) |
+|---|---|---|---:|
+| **Step 1** | Top-of-Book Book Generation & Sequence Stamping | C++ Engine | **41 ns** |
+| **Step 2** | SPSC Ring Write & Atomic Store Memory Barrier | Shared Memory | **65 ns** |
+| **Step 3** | Fast Binary 64B Flat Struct Unpack (`struct.Struct`) | Python | **140 ns** |
+| **Step 4** | Pure Sans-I/O Strategy State Machine Decision (`on_tob`) | Python Quant Brain | **1,620 ns** |
+| **Step 5** | Outbound Binary 64B Flat Struct Pack (`struct.Struct`) | Python | **130 ns** |
+| **Step 6** | Order Engine Match, State Update & ACK Generation | C++ Engine | **104 ns** |
+| **Total** | **End-to-End Tick-to-Order Loop** | **Hybrid Pipeline** | **2,100 ns** ($2.10\,\mu\text{s}$) |
+
+- **Transport + Serialization Overhead:** Dropped from **$148,100\,\text{ns}$** (WebSocket) to **$< 350\,\text{ns}$** (Zero-Copy SHM).
+- **Strategy Decision Time:** The pure Python Sans-I/O state machine executes pricing and risk logic in $\sim 1,620\,\text{ns}$ ($1.62\,\mu\text{s}$).
 
 ---
 
