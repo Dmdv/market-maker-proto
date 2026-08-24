@@ -127,6 +127,10 @@ show_error_codes = true
 # to save a config line would be the wrong trade.
 mypy_path = "../bench"
 
+[[tool.mypy.overrides]]
+module = ["matplotlib", "matplotlib.*", "numpy", "numpy.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--strict-markers --strict-config"
