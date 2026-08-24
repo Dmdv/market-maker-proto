@@ -5,7 +5,7 @@ expose `run_client(url, strategy, ...)` and only ever call four methods on that 
 `on_connect`, `on_disconnect`, `on_timer`, `on_report`. `_Probe` implements exactly those, so a
 benchmark run goes through the SAME session loop, the SAME envelope stamping and the SAME codec
 as a production run, with only the decision logic swapped. The alternative — a transport loop
-living in the harness — would be a second copy of the thing whose difference the A/B is measuring,
+living in the harness — would be a second copy of the thing whose difference §6 is measuring,
 and two hand-copied loops diverge. That is the argument `_session.py` was built on, and it
 applies with more force to the code that produces the numbers.
 
@@ -22,7 +22,7 @@ WHAT THE THREE MODES MEASURE, and why they are not interchangeable:
   that book's `md_seq`. This is the ONLY mode whose engine-side `BenchRecorder` streams mean
   anything: idle echoes one stale `md_seq` forever and paced measures its own pacing phase.
 
-THE MESSAGE MIX NEVER TRIPS `max_live_orders{2}`. Every mode keeps at most two
+THE MESSAGE MIX NEVER TRIPS `max_live_orders{2}` (audit F-07). Every mode keeps at most two
 commands outstanding by construction, and a mode that would need a third skips the slot and
 counts it as lag instead. A single reject disqualifies a run from the primary tables, so the
 pattern has to be safe by design rather than safe in practice.
@@ -90,8 +90,8 @@ class _Probe:
     and returns commands, which is what lets one probe drive both arms unchanged.
 
     THE SAMPLE BUFFERS ARE PREALLOCATED, and the recording path only assigns into them. The
-    design contract is explicit — "samples land in a preallocated array — zero allocation on the hot
-    path, since the harness must not perturb what it measures" (03-system-design-spec.md step 4) —
+    design record is explicit — "samples land in a preallocated array — zero allocation on the hot
+    path, since the harness must not perturb what it measures" (03-system-design-spec.md §4.4) —
     and this originally violated it twice per ACK: a growable `list.append` plus a fresh dataclass
     instance. Both sit inside the exact window being timed, so the allocator and the GC were
     contributing to the tail this harness exists to characterise, at 110k samples per run.
@@ -181,7 +181,7 @@ class _Probe:
         return self._on_ack(msg, kind)
 
     def _on_reject(self, msg: Any) -> list[Any]:
-        """A reject already disqualifies this run from the primary tables, so there is
+        """A reject already disqualifies this run from the primary tables (F-07), so there is
         nothing to gain by continuing — and the outstanding slot must be RELEASED either way.
         Left set, the probe waited for an ack that was never coming and the run died on its
         wall-clock timeout with no diagnosis; measured, on the first real run."""
@@ -224,7 +224,7 @@ class _Probe:
         if self.finished:
             self._done.set()
             return []
-        # STRICTLY PAIRED new -> cancel, in BOTH idle and paced. The phase flips on every
+        # STRICTLY PAIRED new -> cancel, in BOTH idle and paced (F-07). The phase flips on every
         # completed cycle, so an accepted order is always retired by the next command and the
         # engine's live set never exceeds one. Toggled only for idle at first, which left paced
         # sending news forever — every accepted far-from-touch order RESTS (it cannot fill), so
@@ -456,7 +456,8 @@ async def _drive(args: argparse.Namespace) -> int:
     )
     if probe.rejects:
         print(
-            f"run_bench: {probe.rejects} rejects — this run does NOT qualify as a primary table",
+            f"run_bench: {probe.rejects} rejects — this run does NOT qualify as a primary "
+            "table (F-07)",
             file=sys.stderr,
         )
         return 1
@@ -464,7 +465,7 @@ async def _drive(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="run_bench", description="benchmark run")
+    p = argparse.ArgumentParser(prog="run_bench", description="§5.2 benchmark run")
     p.add_argument("--mode", choices=("idle", "paced", "react"), required=True)
     p.add_argument("--stack", choices=("naive", "tuned"), required=True)
     p.add_argument("--url", required=True)

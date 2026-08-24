@@ -1,4 +1,6 @@
-// Shared support for the codec test TUs:
+// Shared support for the Task 2 codec test TUs (gate P4-i2 — the single test file grew
+// to 781 lines, 56% over the 500-line file cap; split along its existing seam, same
+// rationale as the frame_preflight.cpp source split):
 //   test_codec.cpp             — contract / round-trip / encode / hardening-policy cases
 //   test_codec_equivalence.cpp — the arm-equivalence table + traceability batteries
 // Everything here is `inline` in a named namespace: fixture readers, frame mutators,
@@ -140,9 +142,9 @@ inline const mm::Reject kGoldenReject{
     .epoch = 2,
     .cl_id = "",
     // Built FROM the normative source, not respelled: mm::to_string(RejectCode) is THE
-    // wire spelling (types.hpp), and this fixture's byte-compare against
+    // wire spelling (types.hpp F-20), and this fixture's byte-compare against
     // reject.json is what pins the enum spelling to the golden contract — three
-    // previously unlinked literals.
+    // previously unlinked literals (gate P4-i1).
     .code = std::string(mm::to_string(mm::RejectCode::TickSize)),
     .reason = "px not a multiple of tick_size",
 };

@@ -1,4 +1,4 @@
-// — the session write path's and the TOB fan-out's ALLOCATION discipline, measured
+// Task 7 — the session write path's and the TOB fan-out's ALLOCATION discipline, measured
 // against a real engine over real loopback sockets. Its own executable, and the reason is
 // the probe, not the scenario:
 //
@@ -107,7 +107,7 @@ thread_local std::size_t t_calls = 0;
 // per-thread storage is what makes it safe here — arming it around Server::run() on the
 // owner thread cannot fire on the TelemetryWriter's thread, where an escaping bad_alloc
 // would be an uncaught exception on a std::thread and terminate the process. This is the
-// closing seam a backlog item names for the finalize-on-throw fail-safe: "an armed
+// closing seam PENDING item (t)13/F4 names for the finalize-on-throw fail-safe: "an armed
 // allocation-failure probe (or equivalent injected throw) around io_.run()".
 thread_local std::size_t t_throw_at = 0;
 
@@ -367,7 +367,7 @@ void pin_per_tick_cost(int sessions, const std::string &symbol, std::size_t expe
 // record when its first bounded attempt (kFinalSnapshotWait, 250 ms) expires, and finalize()
 // re-offers it on a much larger budget (kFaultPublishWait, 5 s) once the reader resumes and
 // the writer drains — so the marker reaches the ARTIFACT, which is the channel a post-mortem
-// reader and the harness actually consume. The stderr line is the last resort for a
+// reader and the Task 11 harness actually consume. The stderr line is the last resort for a
 // sink that never drains at all, and this case asserts it did NOT fire: reaching it here
 // would mean the re-offer never ran.
 //

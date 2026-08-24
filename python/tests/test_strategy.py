@@ -1,11 +1,11 @@
 """What the strategy DECIDES about one message at a time.
 
-Quoting at the touch, the never-cross belt, and how each engine report moves the
+Quoting at the touch, the never-cross belt (F-28), and how each engine report moves the
 local order picture. The connection-scoped half — the two counters, lifecycle, determinism —
 is in ``test_strategy_session.py``; the shared fixtures are in ``strategy_support.py``.
 
 Every case asserts the EXACT command list, because "emitted something reasonable" is not a
-contract a second transport can be held to: runs this same object under two adapters,
+contract a second transport can be held to: Task 9 runs this same object under two adapters,
 and the whole point of the sans-IO split is that both get identical decisions.
 """
 
@@ -133,7 +133,7 @@ def test_a_fill_racing_its_own_cancel_terminates_cleanly() -> None:
     resend and the replacement untouched.
 
     (This said "land on one DONE". `OState` has no DONE: a terminal order leaves the map
-    rather than being marked, which is the change recorded as the limitations backlogm (v).)"""
+    rather than being marked, which is the change recorded as PENDING_AMENDMENTS item (v).)"""
     s = strategy()
     s.on_tob(tob(1, 1), now_ns=0)
     s.on_report(OrderAck(v=1, seq=2, epoch=1, cl_id="B-1", eng_id=1, status="live", svc_ns=1), 1)
@@ -236,7 +236,7 @@ def test_a_successful_quote_clears_the_side_s_reject_barrier() -> None:
 
 
 def test_a_settled_side_takes_the_decision_the_book_deferred() -> None:
-    """The design's words are "re-evaluate on NEXT REPORT". Deferring to the next BOOK instead
+    """The plan's words are "re-evaluate on NEXT REPORT". Deferring to the next BOOK instead
     leaves the side resting at a price the freshest accepted book already moved off — for as
     long as the feed takes to tick again, which on a quiet market is exactly when a stale
     quote is most dangerous."""
@@ -350,7 +350,7 @@ def test_a_superseded_reject_does_not_bar_the_price_the_replacement_returns_to()
 def test_the_ask_side_also_takes_the_decision_the_book_deferred() -> None:
     """The ASK mirror of `test_a_settled_side_takes_the_decision_the_book_deferred`.
 
-    Added because the coverage gate proved the ask half was executed but never
+    Added because the Task 8 coverage gate proved the ask half was executed but never
     OBSERVED: `_reconsider` was entered 21 times for the ask across both suites and returned
     an empty list every single time, so branch coverage read 100% while two independent
     mutants — hardcoding the desired price to the bid, and returning [] for any non-bid side —

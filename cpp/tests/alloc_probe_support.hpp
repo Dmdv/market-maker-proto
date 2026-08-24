@@ -1,15 +1,17 @@
-// Shared allocation probe for the suite's allocation test TUs. Three
+// Shared allocation probe for the suite's allocation test TUs (gate P1-R5: the one probe TU
+// had grown past the repo's 500-line file cap once the Outbox cases joined the engine's, so
+// it was split the same way as codec_test_support.hpp / engine_test_support.hpp). Three
 // consumer TUs arm it:
 //   test_engine_alloc.cpp — the engine's measured allocation inventory + the strong
 //                           exception guarantee, one injection case per entry point
-//   test_outbox_alloc.cpp — the Outbox's allocation cases //   test_telemetry.cpp    — the ring's
-//   allocation-free steady state ; its armed
+//   test_outbox_alloc.cpp — the Outbox's allocation cases (Task 6)
+//   test_telemetry.cpp    — the ring's allocation-free steady state (Task 6.5); its armed
 //                           region is scoped by what this probe CAN see — the ring's slot
 //                           storage is over-aligned (alignas(64) records) and allocates
 //                           through the unintercepted ALIGNED new, so the no-reallocation
 //                           duty there is carried by the capacity() pin, not the counter.
 //                           Forward consequence of the same mechanics: alignas(64)
-//                           mm::Counters gives any type embedding it (the server layer's Server)
+//                           mm::Counters gives any type embedding it (Task 7's Server)
 //                           alignof 64, so a heap-allocated Server routes around this
 //                           probe too — scope its armed regions accordingly, or add
 //                           aligned interceptors first.

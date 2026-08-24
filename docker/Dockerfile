@@ -1,4 +1,4 @@
-# Authoritative environment (design decision): ubuntu:26.04 — g++ 15.2, boost 1.90, python 3.14.
+# Authoritative environment (decision record): ubuntu:26.04 — g++ 15.2, boost 1.90, python 3.14.
 FROM ubuntu:26.04
 
 # THE TREE THIS IMAGE WAS BUILT FROM, recorded so a reader can ask the image what it contains
@@ -13,9 +13,9 @@ ARG MM_TREE_SHA=unset
 LABEL mm.tree_sha=$MM_TREE_SHA
 
 # ARG, not ENV: build-scoped only — must not persist into the runtime environment or
-# derived images (e.g. the asan stage) per Docker best practices (review finding).
+# derived images (e.g. the Task 12 asan stage) per Docker best practices (P1-R3 finding).
 ARG DEBIAN_FRONTEND=noninteractive
-# perf note: ubuntu:26.04 ships perf in `linux-perf` (Debian-style,
+# perf note (F-25 probe result): ubuntu:26.04 ships perf in `linux-perf` (Debian-style,
 # /usr/bin/perf, no kernel-version wrapper) — NOT in linux-tools-generic, whose 7.0.0-28
 # payload is only cpupower/rtla/usbip.
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -26,16 +26,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /work
 
-# Coarse-to-fine layered copies (review finding): the expensive C++ dependency fetch +
+# Coarse-to-fine layered copies (gate finding): the expensive C++ dependency fetch +
 # release build re-runs only when C++ inputs change; Python-only edits reuse that layer.
 COPY CMakeLists.txt CMakePresets.json ./
 COPY cpp cpp
+COPY bench bench
 
 # C++ release build (FetchContent: pinned glaze/Catch2 tags + hash-pinned nlohmann release archive).
 RUN cmake --preset rel && cmake --build --preset rel
 
 # Python 3.14 venv with both client arms' dependencies. Deliberately NO
-# `pip install --upgrade pip` (review finding): an unpinned pip would be the only floating
+# `pip install --upgrade pip` (gate finding): an unpinned pip would be the only floating
 # dependency in an otherwise fully pinned image — the venv's bundled pip installs the
 # ==-pinned wheels fine, and scripts/verify_linux.sh records the effective pip version
 # alongside the other toolchain versions.
@@ -48,6 +49,6 @@ RUN python3.14 -m venv /opt/venv \
 # scripts/verify_linux.sh glaze probe reads (build/rel/_deps/glaze-src/include).
 COPY . .
 
-# venv on PATH so console scripts (mm-client from the transport adapters, pytest) resolve unqualified
-# inside the container (review finding).
+# venv on PATH so console scripts (mm-client from Task 9, pytest) resolve unqualified
+# inside the container (codex gate finding, Task 0).
 ENV PATH="/opt/venv/bin:${PATH}"

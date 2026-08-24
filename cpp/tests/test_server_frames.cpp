@@ -1,7 +1,7 @@
-// integration — the FRAME policy and liveness surface: text-only framing and its
+// Task 7 integration — the FRAME policy and liveness surface: text-only framing and its
 // 1002s, the two-tier message-size bound (the 64 KiB policy cap against the transport
 // ceiling's 1009), inbound reassembly, control-frame keep-alive against the idle timeout,
-// and the acceptor's port reuse. Every close code asserted here is a row of the design's
+// and the acceptor's port reuse. Every close code asserted here is a row of the plan's
 // normative close-code table. Split from test_server_ws.cpp under the 500-line cap.
 #include "server_test_support.hpp"
 

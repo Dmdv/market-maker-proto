@@ -13,7 +13,7 @@
     {
       "name": "rel",
       "displayName": "Release",
-      "description": "-O3 -g -DNDEBUG; -g feeds perf --call-graph dwarf, no codegen change",
+      "description": "-O3 -g -DNDEBUG; -g feeds Task 13 perf --call-graph dwarf, no codegen change",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/rel",
       "cacheVariables": {
@@ -36,7 +36,7 @@
     {
       "name": "tsan",
       "displayName": "Thread sanitizer",
-      "description": "-O1 -g TSan; gains real work at (SPSC telemetry ring producer/consumer stress)",
+      "description": "-O1 -g TSan; gains real work at Task 6.5 (SPSC telemetry ring producer/consumer stress)",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/tsan",
       "cacheVariables": {
@@ -44,13 +44,26 @@
         "CMAKE_CXX_FLAGS": "-O1 -g -fsanitize=thread",
         "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=thread"
       }
+    },
+    {
+      "name": "coverage",
+      "displayName": "Code coverage",
+      "description": "-O0 -g Clang source-based coverage instrumentation",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/coverage",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_FLAGS": "-O0 -g -fprofile-instr-generate -fcoverage-mapping",
+        "CMAKE_EXE_LINKER_FLAGS": "-fprofile-instr-generate"
+      }
     }
   ],
   "buildPresets": [
     { "name": "dev", "configurePreset": "dev" },
     { "name": "rel", "configurePreset": "rel" },
     { "name": "asan", "configurePreset": "asan" },
-    { "name": "tsan", "configurePreset": "tsan" }
+    { "name": "tsan", "configurePreset": "tsan" },
+    { "name": "coverage", "configurePreset": "coverage" }
   ],
   "testPresets": [
     {
@@ -79,6 +92,11 @@
     {
       "name": "tsan",
       "configurePreset": "tsan",
+      "inherits": "correctness-base"
+    },
+    {
+      "name": "coverage",
+      "configurePreset": "coverage",
       "inherits": "correctness-base"
     },
     {

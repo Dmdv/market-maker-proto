@@ -1,7 +1,7 @@
 """The CLI surface: what an operator can ask for, and what the process returns.
 
 `app.py` is the only module in `mmclient` whose stdout IS its interface, and it is what the
-demo drives. Its exit code carries the one distinction a supervisor needs — the
+Task 10 demo drives. Its exit code carries the one distinction a supervisor needs — the
 engine was reachable, or it was not — so the reconnect policy's arithmetic is pinned here
 rather than left to the demo to discover.
 """
@@ -20,7 +20,7 @@ def _strategy() -> Strategy:
 
 
 def test_the_defaults_are_the_documented_ones() -> None:
-    """This flag surface is published, and the benchmark harness reads it; a default that
+    """The plan publishes this flag surface and Task 11's harness reads it; a default that
     drifts silently changes what the demo and the benchmark actually ran."""
     args = build_parser().parse_args([])
     assert args.stack == "tuned"  # the measured arm is the default; naive is opt-in

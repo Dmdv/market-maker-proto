@@ -1,4 +1,4 @@
-// Domain types + order validation (interfaces are normative).
+// Task 1: domain types + order validation (plan interfaces are normative).
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_tostring.hpp>
 
@@ -19,7 +19,7 @@
 #include <utility>
 
 // Teach Catch2 to print reject codes: failing table rows read e.g. "LOT_SIZE == TICK_SIZE"
-// instead of "{?} == {?}".
+// instead of "{?} == {?}" (gate finding — reuses the normative mm::to_string wire spellings).
 namespace Catch {
 template <> struct StringMaker<mm::RejectCode> {
   static std::string convert(mm::RejectCode c) { return std::string(mm::to_string(c)); }
@@ -250,11 +250,11 @@ TEST_CASE("types: validation check order is deterministic") {
 }
 
 // Ordinal pin: reordering the enum or inserting a code before StaleEpoch breaks the build
-// here, keeping the existing wire spellings stable. An *appended* code is NOT
+// here, keeping the existing wire spellings stable (F-20). An *appended* code is NOT
 // caught by this assert — it is caught by the exhaustive switch in to_string(), which
 // this TU compiles under `#pragma GCC diagnostic error "-Wswitch"` (see the header
 // include at the top), so an append is a hard build error here.
-// Every ordinal is pinned, not just the last (pinned for reproducible builds): swapping any two
+// Every ordinal is pinned, not just the last (codex hard-gate S3): swapping any two
 // earlier codes must break this build, since the wire spellings are the contract.
 static_assert(static_cast<std::uint8_t>(RejectCode::UnsupportedVersion) == 0);
 static_assert(static_cast<std::uint8_t>(RejectCode::UnknownType) == 1);
@@ -275,9 +275,9 @@ static_assert(static_cast<std::uint8_t>(RejectCode::StaleEpoch) == 15,
               "RejectCode reordered or code inserted: re-sync the to_string() wire "
               "spellings (appended codes are caught by -Wswitch, not this assert)");
 
-TEST_CASE("types: to_string emits the 03 safety-control SCREAMING_SNAKE wire strings") {
+TEST_CASE("types: to_string emits the 03 §2.3 SCREAMING_SNAKE wire strings") {
   using enum RejectCode;
-  // constexpr to_string lets the wire spellings be contract-checked at build time.
+  // constexpr to_string lets the F-20 wire spellings be contract-checked at build time.
   STATIC_CHECK(mm::to_string(UnsupportedVersion) == "UNSUPPORTED_VERSION");
   STATIC_CHECK(mm::to_string(UnknownType) == "UNKNOWN_TYPE");
   STATIC_CHECK(mm::to_string(Malformed) == "MALFORMED");

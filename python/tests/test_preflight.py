@@ -106,7 +106,7 @@ def test_leading_utf8_bom_rejects() -> None:
     The WORDING is asserted, not merely the raise: with only ``pytest.raises(ValueError)``
     the entire BOM guard could be deleted and this test still passed — the BOM bytes then
     fail the grammar scan at byte 0 instead, through a path this test does not claim to
-    exercise. BOM rejection is one of the cross-language contract items the gate
+    exercise. BOM rejection is one of the cross-language contract items the Task 2 gate
     established, and it has a dedicated wording precisely so it can be pinned.
     """
     assert_one_wording(b"\xef\xbb\xbf" + TOB, "malformed: leading UTF-8 BOM")
@@ -283,8 +283,7 @@ def test_top_level_key_cap(dec: Callable[[bytes], Any]) -> None:
 def test_nesting_depth_cap(dec: Callable[[bytes], Any], extra: int) -> None:
     """detail::kMaxNestingDepth = 32 open levels, the root object included. The 30k case
     is the stack bomb: rejected by policy at level 33, never recursed into (assignment
-    the protocol rule) — and sized to fit INSIDE the 64 KiB frame cap, so it is the depth
-    guard being
+    §3) — and sized to fit INSIDE the 64 KiB frame cap, so it is the depth guard being
     tested here and not the byte cap that would otherwise refuse it one step earlier."""
     frame = prepend(TOB, b'"zzz_unknown":' + b"[" * extra + b"]" * extra)
     if extra < 32:
@@ -432,7 +431,7 @@ def test_preflight_fast_path_never_disagrees_with_the_scan_of_record(frame: byte
 
 def test_the_canonical_frame_really_takes_the_fast_path(monkeypatch: Any) -> None:
     """Otherwise a regressed fast path would be invisible: the general scanner would
-    quietly answer every frame, correctly and ~4x slower, and only the A/B numbers would
+    quietly answer every frame, correctly and ~4x slower, and only the §6 numbers would
     know."""
     monkeypatch.setattr(_preflight, "_scan_general", lambda frame: pytest.fail("fast path missed"))
     assert decode(TOB).seq == 7

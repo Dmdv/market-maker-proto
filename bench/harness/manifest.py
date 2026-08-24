@@ -7,11 +7,11 @@ makes a run unreproducible rather than merely under-documented.
 The awkward fields are the honest ones. CPU frequency scaling moves p99 more than most
 optimizations do, and inside a container VM the governor is usually not readable at all — so
 `cpu_governor` says *"not controllable inside the container VM — uncontrolled"* in words rather
-than being absent. A missing key reads as "controlled"; it almost never was.
+than being absent (audit F-22). A missing key reads as "controlled"; it almost never was.
 
 `qualifies_as_primary` is the gate between "a run happened" and "a run can appear in a primary
 table". It is deliberately conjunctive and deliberately strict: rejects mean the message mix
-tripped an engine limit, so the pattern measured is not the pattern intended; saturation
+tripped an engine limit, so the pattern measured is not the pattern intended (F-07); saturation
 means the recorder's streams are truncated; a gap means the process stopped.
 """
 
@@ -25,7 +25,7 @@ from typing import Any
 
 __all__ = ["capture", "cpu_seconds", "qualifies_as_primary"]
 
-# Stated in words when the value cannot be read, rather than omitted.
+# Stated in words when the value cannot be read, rather than omitted (F-22).
 _GOVERNOR_UNKNOWN = "not readable on this host — uncontrolled (see BENCHMARK.md methodology)"
 _LINUX_GOVERNOR = Path("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor")
 
@@ -145,7 +145,7 @@ def _engine_sha256(engine: Path | None) -> str:
     numbers from a different one built the same way. A content hash can: `shasum -a 256` on the
     artifact either matches or it does not.
 
-    This exists because a whole 22-run matrix previously taken inside an image built one commit
+    This exists because a whole 22-run matrix was once taken inside an image built one commit
     behind the tree, and nothing in the resulting manifests recorded which binary ran — the
     mismatch had to be reconstructed afterwards from image labels and commit archaeology. The
     sibling `image_digest` field is for the container the run happened in; this one is for the
@@ -182,7 +182,7 @@ def capture(
     """Everything a reader needs to reproduce this run, as a JSON-serialisable dict.
 
     `rejects` and `gaps` are passed IN rather than discovered here: only the client that ran the
-    mix knows how many of its commands the engine refused and whether its own send stream
+    mix knows how many of its commands the engine refused (F-07) and whether its own send stream
     stalled. Both are inputs to `qualifies_as_primary`, and both are recorded here so the verdict
     can be recomputed later from the artifact alone.
 
@@ -211,7 +211,7 @@ def capture(
         # --- what was run ------------------------------------------------------------
         # BOTH LEGS of the arm are named. `stack` alone described only the Python side, so a
         # matrix in which the engine's codec never moved off `tuned` produced 22 manifests that
-        # were all individually truthful and collectively concealed a wrong baseline. The A/B swap
+        # were all individually truthful and collectively concealed a wrong baseline. The §6 swap
         # spans four components across two languages; the artifact has to say which arm each leg
         # was on, or the comparison is unfalsifiable from its own evidence.
         "stack": stack,
@@ -243,7 +243,7 @@ def capture(
 
 
 def qualifies_as_primary(*, rejects: int, saturated: int, gaps: bool) -> bool:
-    """Whether this run may appear in a PRIMARY benchmark table.
+    """Whether this run may appear in a PRIMARY §5.2 table.
 
     All three disqualifiers describe a run that measured something other than what it set out to:
       * `rejects` — the mix tripped an engine limit, so the pattern is not the intended one;

@@ -1,4 +1,4 @@
-// Shared fixtures for the server FLOW suites — the three TUs split out of
+// Shared fixtures for the Task 7 server FLOW suites — the three TUs split out of
 // test_server_flow.cpp under the repository's 500-line cap (outbox/conflation policy,
 // process shutdown, and the durable artifacts). Everything here is either process-wide
 // state a case BORROWS and must hand back on every exit path, or a reader for an artifact
@@ -150,7 +150,7 @@ private:
 
 // ---- artifact readers ----
 
-// The --bench-out dump read back through the harness contract (bench_recorder.hpp):
+// The --bench-out dump read back through the Task 11 harness contract (bench_recorder.hpp):
 // SIX little-endian uint64 header words, then the four counted int64 streams, and nothing
 // else. test_bench_recorder.cpp reads the same shape against a hand-driven recorder; this
 // reader is what makes the SERVER's half — sample capture through artifact — visible at all.

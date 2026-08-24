@@ -1,4 +1,5 @@
-// tests, second TU: the codec arm-equivalence table plus the traceability
+// Task 2 tests, second TU (gate P4-i2 — the 500-line file cap; shared helpers in
+// codec_test_support.hpp): the codec arm-equivalence table plus the traceability
 // batteries (missing-field matrix, make_codec identity pin, sanitized-tag detail,
 // encode value-domain agreement, inbound-fixture key-order pin).
 #include <catch2/catch_test_macros.hpp>
@@ -24,8 +25,8 @@ using namespace codec_test;
 // Codec equivalence: the two arms sit behind ONE runtime flag in ONE engine binary and
 // are A/B-benchmarked as "equivalent functionality", so an accept/reject divergence is a
 // correctness defect. Every input here was either empirically divergent at some point
-// (commit 220b665 closed the first four; the review R1 batch closed the schema-scoping,
-// key-policy, and byte-policy rows; the review batch closed the number-token rows —
+// (commit 220b665 closed the first four; the codex R1 batch closed the schema-scoping,
+// key-policy, and byte-policy rows; the grok R1 batch closed the number-token rows —
 // the S2 note in codec.hpp) or pins a shared policy decision (codec.hpp). Each case
 // asserts the verdict, RejectCode AND detail of BOTH arms, plus their equality.
 TEST_CASE("codec: both arms agree on frame-level rejections", "[codec]") {
@@ -58,8 +59,7 @@ TEST_CASE("codec: both arms agree on frame-level rejections", "[codec]") {
       {"malformed value in an unknown field",
        R"({"t":"cancel_order","v":1,"seq":1,"epoch":1,"cl_id":"B-1","junk":@@@})", kMalformed},
       {"well-formed control frame", cancel, kAccept},
-      // schema-scoped integer tokens (pinned for reproducible builds): unknown fields are never
-      // token-checked
+      // schema-scoped integer tokens (codex R1): unknown fields are never token-checked
       {"unknown px on cancel_order may carry an exponent",
        replace_first(cancel, "\"cl_id\":\"C-1\"", "\"cl_id\":\"C-1\",\"px\":1e3"), kAccept},
       {"unknown px on cancel_order may carry a bool",
@@ -76,13 +76,12 @@ TEST_CASE("codec: both arms agree on frame-level rejections", "[codec]") {
        replace_first(cancel, "\"seq\":4", "\"seq\":18446744073709551616"), kMalformed},
       {"seq negative for an unsigned field", replace_first(cancel, "\"seq\":4", "\"seq\":-1"),
        kMalformed},
-      // The adjacent unpinned spelling: -0 is a grammar-valid integral
+      // The adjacent unpinned spelling (gate P4-i2): -0 is a grammar-valid integral
       // token whose sign verdict must come from the SHARED unsigned predicate in both
       // arms, never from a library's refusal of '-' into a uint64_t.
       {"seq as -0 on an unsigned field", replace_first(cancel, "\"seq\":4", "\"seq\":-0"),
        kMalformed},
-      // top-level key policy (pinned for reproducible builds): literal ASCII keys, duplicates
-      // reject
+      // top-level key policy (codex R1): literal ASCII keys, duplicates reject
       {"escaped alias of the t key",
        "{\"\\u0074\":\"cancel_order\",\"v\":1,\"seq\":4,\"epoch\":2,\"cl_id\":\"C-1\"}",
        kMalformed},
@@ -97,8 +96,7 @@ TEST_CASE("codec: both arms agree on frame-level rejections", "[codec]") {
        replace_first(cancel, "\"t\":\"cancel_order\"",
                      "\"t\":\"cancel_order\",\"t\":\"cancel_order\""),
        kMalformed},
-      // byte-level lexical policy (pinned for reproducible builds): BOM / NUL / UTF-8 shared by
-      // both arms
+      // byte-level lexical policy (codex R1): BOM / NUL / UTF-8 shared by both arms
       {"leading UTF-8 BOM", "\xEF\xBB\xBF" + cancel, kMalformed},
       {"trailing raw NUL", cancel + std::string(1, '\0'), kMalformed},
       {"raw NUL between tokens",
@@ -110,16 +108,16 @@ TEST_CASE("codec: both arms agree on frame-level rejections", "[codec]") {
        kMalformed},
       {"raw control byte inside a string", replace_first(cancel, "C-1", std::string("C") + '\x01'),
        kMalformed},
-      {"escaped NUL in cl_id rejects (identifier byte policy, a review)",
+      {"escaped NUL in cl_id rejects (identifier byte policy, gate P4-i1)",
        replace_first(cancel, "C-1", "a\\u0000b"), kMalformed},
       {"escaped DEL in cl_id rejects", replace_first(cancel, "C-1", "a\\u007Fb"), kMalformed},
       {"escaped control characters stay legal inside an UNKNOWN value",
        with_unknown("\"x\":\"a\\u0000b\""), kAccept},
-      // nesting depth guard (pinned for reproducible builds)
+      // nesting depth guard (codex R1, S1)
       {"nesting at the shared depth limit", nested_cancel(mm::detail::kMaxNestingDepth - 1),
        kAccept},
       {"nesting one level past the limit", nested_cancel(mm::detail::kMaxNestingDepth), kMalformed},
-      // number-token grammar in UNKNOWN fields: the shared preflight is
+      // number-token grammar in UNKNOWN fields (grok R1, S2): the shared preflight is
       // the grammar authority and validates numbers LEXICALLY, so a grammar-valid
       // number of ANY magnitude is skippable. Without the shared pass the arms diverge
       // in OPPOSITE directions: nlohmann materializes doubles (rejecting 1e309 and
@@ -162,7 +160,10 @@ TEST_CASE("codec: both arms agree on frame-level rejections", "[codec]") {
       // top-level key cap (fixed-capacity preflight scan: no decode-path allocation)
       {"32 top-level keys accepted", cancel_with_keys(32), kAccept},
       {"33 top-level keys rejected", cancel_with_keys(33), kMalformed},
-      // int64 range boundaries on the SELECTED schema's i64 fields
+      // int64 range boundaries on the SELECTED schema's i64 fields (gate P4-i1: the
+      // naive arm's int64-range guard had zero coverage — deleting it silently accepted
+      // px=2^63 as INT64_MIN while the tuned arm rejected; the negative boundary also
+      // pins glaze's own int64-min parse)
       {"px one past int64 max",
        replace_first(norder, "\"px\":499995", "\"px\":9223372036854775808"), kMalformed},
       {"qty one past int64 max",
@@ -171,7 +172,7 @@ TEST_CASE("codec: both arms agree on frame-level rejections", "[codec]") {
        kAccept},
       {"px at int64 min", replace_first(norder, "\"px\":499995", "\"px\":-9223372036854775808"),
        kAccept},
-      // identifier shape policy: length caps + control-byte rule, shared
+      // identifier shape policy (gate P4-i1): length caps + control-byte rule, shared
       // detail strings — codec.hpp kMaxClIdLen/kMaxSymbolLen/kMaxSideLen
       {"cl_id at the 64-byte cap", replace_first(cancel, "C-1", std::string(64, 'c')), kAccept},
       {"cl_id past the 64-byte cap", replace_first(cancel, "C-1", std::string(65, 'c')),
@@ -185,7 +186,7 @@ TEST_CASE("codec: both arms agree on frame-level rejections", "[codec]") {
       {"side past the 8-byte cap",
        replace_first(norder, "\"side\":\"B\"", "\"side\":\"BBBBBBBBB\""), kMalformed},
       // hostile unknown tag: detail is sanitized (truncated + controls replaced) but the
-      // verdict stays UnknownType with byte-identical details across arms
+      // verdict stays UnknownType with byte-identical details across arms (gate P4-i1)
       {"oversized control-laden unknown tag",
        replace_first(cancel, "\"t\":\"cancel_order\"",
                      "\"t\":\"bad\\u0001" + std::string(60, 'X') + "\""),
@@ -203,9 +204,9 @@ TEST_CASE("codec: both arms agree on frame-level rejections", "[codec]") {
       CHECK(tuned_err->code == *c.expect_reject);
       CHECK(naive_err->code == *c.expect_reject);
       CHECK(tuned_err->code == naive_err->code);     // the equivalence invariant itself
-      CHECK(tuned_err->detail == naive_err->detail); // ONE detail per shared reason
+      CHECK(tuned_err->detail == naive_err->detail); // ONE detail per shared reason (grok R1)
     } else if (!c.expect_reject) {
-      // Accept rows compare the DECODED PAYLOADS, not just the verdict: a
+      // Accept rows compare the DECODED PAYLOADS, not just the verdict (gate P4-i1): a
       // same-verdict value- or alternative-level differential — the exact class of the
       // R1 S1, where one frame decoded as CANCEL_ORDER on naive and NEW_ORDER on tuned
       // — must fail here, covering unescaping, defaulting and alternative selection.
@@ -221,7 +222,7 @@ TEST_CASE("codec: every required inbound field missing -> Malformed on both arms
   // The closed field set is engine-inbound policy (codec.hpp) — including the two fields
   // that HAVE struct defaults (md_seq, post_only), where a dropped extraction would
   // silently default on one arm while the other rejects via error_on_missing_keys
-  //.
+  // (gate P4-i1: only cl_id-on-new_order was covered).
   const auto kind = GENERATE(mm::CodecKind::Naive, mm::CodecKind::Tuned);
   INFO("codec = " << kind_name(kind));
   const auto codec = mm::make_codec(kind);
@@ -242,9 +243,9 @@ TEST_CASE("codec: every required inbound field missing -> Malformed on both arms
 }
 
 TEST_CASE("codec: make_codec dispatches each CodecKind to its own implementation", "[codec]") {
-  // Identity pin: swapping the dispatch branches — or serving one arm for
+  // Identity pin (gate P4-i1): swapping the dispatch branches — or serving one arm for
   // both kinds — kept every behavioral test green while inverting the engine's --codec
-  // flag and every naive-vs-tuned attribution in the benchmark docs. RTTI is enabled in all
+  // flag and every naive-vs-tuned attribution in Tasks 13/14. RTTI is enabled in all
   // presets; the detail factories are the per-TU normative constructors.
   const auto naive = mm::make_codec(mm::CodecKind::Naive);
   const auto tuned = mm::make_codec(mm::CodecKind::Tuned);
@@ -264,7 +265,7 @@ TEST_CASE("codec: make_codec dispatches each CodecKind to its own implementation
 TEST_CASE("codec: unknown-tag detail is truncated and control-sanitized", "[codec]") {
   // DecodeError.detail feeds the outbound Reject reason and log lines, so a hostile tag
   // must not carry control bytes (log forgery) or attacker-chosen length (allocation /
-  // queue amplification) into it — codec.hpp kMaxTagDetailBytes.
+  // queue amplification) into it — codec.hpp kMaxTagDetailBytes (gate P4-i1).
   const auto kind = GENERATE(mm::CodecKind::Naive, mm::CodecKind::Tuned);
   INFO("codec = " << kind_name(kind));
   const auto codec = mm::make_codec(kind);
@@ -289,7 +290,7 @@ TEST_CASE("codec: negative integers and non-ASCII strings encode identically in 
           "[codec]") {
   // No golden fixture carries a negative number or a non-ASCII string, so the sign path
   // of the naive int64 serializer and the two escapers' >= 0x80 passthrough agreement
-  // were unpinned: a glaze WriteOpts change enabling \uXXXX escaping of
+  // were unpinned (gate P4-i1): a glaze WriteOpts change enabling \uXXXX escaping of
   // non-ASCII would ship different bytes per arm, and non-ASCII cl_id is reachable (the
   // preflight accepts any valid RFC 3629 sequence and the engine echoes cl_id).
   const auto naive = mm::make_codec(mm::CodecKind::Naive);
@@ -332,11 +333,12 @@ TEST_CASE("codec: negative integers and non-ASCII strings encode identically in 
   }
 }
 
-TEST_CASE("codec: inbound golden fixtures keep declaration key order (byte contract)", "[codec]") {
-  // Python msgspec must reproduce the INBOUND fixtures byte-for-byte on encode
+TEST_CASE("codec: inbound golden fixtures keep declaration key order (Task 4 byte contract)",
+          "[codec]") {
+  // Python msgspec (Task 4) must reproduce the INBOUND fixtures byte-for-byte on encode
   // ("fixtures were written to match" — plan). The outbound fixtures are byte-pinned via
   // encode above; decode is deliberately key-order-insensitive, so nothing else pins the
-  // two inbound files' key ORDER against protocol.hpp declaration order.
+  // two inbound files' key ORDER against protocol.hpp declaration order (gate P4-i1).
   const auto keys_of = [](const std::string &text) {
     std::vector<std::string> keys;
     const auto parsed = nlohmann::ordered_json::parse(text);
@@ -352,7 +354,7 @@ TEST_CASE("codec: inbound golden fixtures keep declaration key order (byte contr
 }
 
 // ---------------------------------------------------------------------------
-// Direct predicate pins (review mutation finding, final-state review).
+// Direct predicate pins (grok mutation finding, Task 2 final-state review).
 //
 // The equivalence cases assert only that `"seq":-1` is rejected end-to-end — which stays
 // true even if is_unsigned_integer_token loses its sign check, because glaze's from_chars

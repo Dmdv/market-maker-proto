@@ -1,4 +1,4 @@
-// integration — the DURABLE ARTIFACTS a run leaves behind: the bench dump and the
+// Task 7 integration — the DURABLE ARTIFACTS a run leaves behind: the bench dump and the
 // telemetry JSONL, and the ways they can lie. A bench path that would truncate the
 // telemetry file, per-message narration escaping its flag, the dump's peak-session word
 // (a watermark, not a gauge), and the shutdown health verdict a dead sink must falsify.
@@ -49,7 +49,7 @@ TEST_CASE("server: a bench dump aimed at the telemetry file is refused before it
     variant_cfg.bench_out = upper_spelling(variant.path()).string();
     // Construction PASSES — that is the point — and run() then refuses before io_.run(),
     // so this call returns rather than blocking. main.cpp turns the throw into one stderr
-    // line and exit 2, the same CLI contract the constructor's arms carry.
+    // line and exit 2, the same F-12 contract the constructor's arms carry.
     mm::Server srv{variant_cfg, mm::Instrument{.symbol = "MOCKUSDT"}};
     CHECK_THROWS_AS(srv.run(), std::invalid_argument);
   }
@@ -97,9 +97,9 @@ TEST_CASE("server: per-message events appear only under telemetry_verbose", "[se
 }
 
 TEST_CASE("server: bench_out forces telemetry_verbose off at construction", "[server]") {
-  // Per-message narration is measurement noise:
-  // main.cpp refuses the combination on the CLI, and Server's constructor forces the flag off for
-  // direct embedders. Without that belt a Config that sets both still emits cmd_in/tob_out and
+  // Per-message narration is measurement noise (record A1 / §5.2): main.cpp refuses the
+  // combination on the CLI, and Server's constructor forces the flag off for direct
+  // embedders. Without that belt a Config that sets both still emits cmd_in/tob_out and
   // contaminates the measured windows; the quiet half of the verbose case above never
   // sets bench_out, so it cannot kill this mutant.
   auto feed = FeedFile{R"({"set":[500000,100,500010,80]})", R"({"halt_ms":100})"};
@@ -130,7 +130,7 @@ TEST_CASE("server: bench_out forces telemetry_verbose off at construction", "[se
   // with --bench-out, produced a dump, and asserted only the verbose gate — so `if (false)
   // recorder_->dump(...)`, deleting the dump outright, and making ServerImpl::recorder()
   // return nullptr (killing every md_published/md_written/order_for/svc call site) ALL
-  // survived 161/161. This file is the benchmark harness's sole input, so both halves are
+  // survived 161/161. The plan makes this file Task 11's sole input, so both halves are
   // pinned here: that the samples were captured at all, and the (t)10 format they land in.
   const BenchDump dump = read_bench_dump(bench.path());
   CHECK(dump.svc >= 1);    // one command serviced

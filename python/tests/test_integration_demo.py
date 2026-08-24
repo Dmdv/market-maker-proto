@@ -1,4 +1,4 @@
-"""The seven-step demo, executed as a test against a REAL engine subprocess.
+"""The §4 seven-step demo, executed as a test against a REAL engine subprocess.
 
 This is the only place the whole system runs: the C++ engine binary, a real WebSocket over
 loopback TCP, both Python transports, and the strategy core. Everything else in the suite
@@ -7,11 +7,11 @@ the naive arm was sending every command as a BINARY frame, which the engine clos
 and no unit test could see it because the test double accepted binary frames the engine does
 not.
 
-It is a TEST rather than a script because a demo nobody runs in CI stops being
+It is a TEST rather than a script (audit F-06) because a demo nobody runs in CI stops being
 true quietly. `scripts/demo.sh` drives the same checkpoints for a human reader; if the two
 ever disagree, this file is the one that fails a build.
 
-BOTH STACKS run the same script. The naive/tuned swap is the measured hot-path optimization, and an
+BOTH STACKS run the same script. The naive/tuned swap is the measured §6 optimization, and an
 optimization that also changes what the client DOES is not a like-for-like comparison — so the
 two arms are held to identical observable behaviour here, not merely to identical latency
 shape. That is what caught the binary-frame defect.
@@ -55,7 +55,7 @@ PATIENT_STALE_MS = 10_000
 class EventLog:
     """Every message the session saw and every frame it sent, in order.
 
-    BOTH directions, because the demo script is a sequence of stimulus-and-response and the
+    BOTH directions, because the §4 script is a sequence of stimulus-and-response and the
     interesting claims are about the pairing: "it quoted at the touch of the book it was
     given". Recording only what was sent leaves you asserting prices you have to guess.
     """
@@ -166,7 +166,7 @@ def _telemetry(eng: Engine) -> list[dict[str, Any]]:
 
 @pytest.mark.parametrize("run_client", STACKS)
 async def test_the_demo_script_runs_end_to_end(run_client: Any, live_engine: Any) -> None:
-    """Steps 1-5 of the demo script, against a live engine.
+    """Steps 1-5 of the §4 script, against a live engine.
 
     One window rather than five, because the feed drives the sequence and pausing between
     assertions would change what is being tested — the point is that the client keeps up with
@@ -234,8 +234,7 @@ def _live_timeline(seen: list[dict[str, Any]]) -> list[tuple[dict[str, Any], fro
     """Replay the inbound stream, returning the live-order set AFTER each engine message.
 
     Reconstructed from the ORDERED log rather than read off the strategy or off a counter peak,
-    because the demo's steps are claims about specific MOMENTS; `strategy.live_or_pending()`
-    only ever
+    because §4's steps are claims about specific MOMENTS. `strategy.live_or_pending()` only ever
     holds the current picture, and by the time an assertion runs the ask move and the fill have
     already rewritten it; a telemetry peak of `live_orders == 2` is satisfied by any run that ever
     touched two, including one that never held both quotes at the same time. Neither can express
@@ -264,12 +263,11 @@ def _acked(log: EventLog) -> set[str]:
 async def test_the_four_step_relationships_hold_as_ordered_checkpoints(
     run_client: Any, live_engine: Any
 ) -> None:
-    """Demo steps 3, 4 and 5 as EXACT relationships at ordered checkpoints .
+    """§4 steps 3, 4 and 5 as EXACT relationships at ordered checkpoints (plan Task 10 Step 1).
 
     The sibling end-to-end test asserts the shape of the run — that quotes went out at published
     prices, that the envelope counter is contiguous, that acks came back. What it does NOT assert
-    is the part the demo spec actually pins: that BOTH orders were acked and exactly two
-    were live, that
+    is the part §4 actually specifies: that BOTH orders were acked and exactly two were live, that
     a one-sided book move drew exactly one cancel and one replacement ON THAT SIDE and left the
     other alone, and that a fill was followed by a restored two-sided quote. Its step-4 block was
     additionally guarded by `if len(asks) > 1`, so on any run where the window happened not to
@@ -350,7 +348,7 @@ async def test_the_four_step_relationships_hold_as_ordered_checkpoints(
 async def test_a_hostile_second_connection_does_not_disturb_the_first(
     run_client: Any, live_engine: Any
 ) -> None:
-    """Step 6, and the one that matters most.
+    """Step 6, and the one that matters most (F-02/F-08).
 
     A second session sends garbage. The engine must reject it on THAT session and leave the
     first session's orders untouched — no unsolicited report, no state change, and the first

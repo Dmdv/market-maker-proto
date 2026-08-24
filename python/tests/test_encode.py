@@ -323,7 +323,7 @@ def test_the_version_verdict_outranks_every_field_error(enc: Callable[[NewOrder]
 @ENCODERS
 def test_each_adjacent_pass_boundary_is_pinned(enc: Callable[[NewOrder], bytes]) -> None:
     """The composite case above only proves version-first; it stays green if the two passes
-    BELOW it are reordered. Pin each adjacent boundary so any swap fails:
+    BELOW it are reordered. Pin each adjacent boundary so any swap fails (codex hard gate):
     type-only before domain, and domain before identifier.
     """
     # type-only (v) vs type-only (post_only): both are wire-type rules, version answers first.
@@ -399,7 +399,7 @@ def test_the_naive_arm_enforces_a_closed_literal_exactly_as_msgspec_does() -> No
     that from msgspec for free. The naive arm has to be told, so this pins the checker the
     dispatch hands back — both of its refusals and its acceptance.
 
-    It matters because the two arms are the A/B A/B: if one accepts a frame the other refuses,
+    It matters because the two arms are the §6 A/B: if one accepts a frame the other refuses,
     they are not decoding the same protocol, and a latency comparison between them is measuring
     two different things.
     """

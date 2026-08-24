@@ -2,7 +2,7 @@
 # leak into the authoritative container (macOS artifacts would poison the Linux build).
 # Docker matches patterns against the context-root-relative path (Go filepath.Match, NOT
 # recursive like .gitignore) — Python artifacts appear at any depth (python/mmclient/
-# __pycache__, python/mmclient.egg-info, ...), so those need the **/ prefix (review finding).
+# __pycache__, python/mmclient.egg-info, ...), so those need the **/ prefix (P1-R3 finding).
 build/
 cmake-build-*/
 .venv/

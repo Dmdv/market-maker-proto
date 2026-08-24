@@ -1,4 +1,4 @@
-"""Sanity cases for the benchmark harness.
+"""Sanity cases for the §5.2 benchmark harness.
 
 These are the four properties whose failure would make every number the harness reports wrong
 while it still looked like it worked — which is the only failure mode that matters in a
@@ -66,7 +66,7 @@ def test_warm_up_samples_are_dropped_by_count() -> None:
 
     By COUNT rather than by time, because the engine's own streams have no timestamps to filter
     on and the client and engine cycles correspond 1:1 in idle and react modes — so one rule
-    applies to both sides of the measurement.
+    applies to both sides of the measurement (audit F-27).
     """
     samples = array("q", [*range(1000, 1010), 1, 2, 3, 4, 5])
     kept = summarize.drop_warmup(samples, 10)
@@ -87,7 +87,7 @@ def test_dropping_more_warm_up_than_exists_is_refused() -> None:
 def test_a_short_run_exits_nonzero_and_emits_no_summary(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """benchmark sets a 100k floor for a primary table. A run that fell short must FAIL, not print a
+    """§5.2 sets a 100k floor for a primary table. A run that fell short must FAIL, not print a
     thin table that reads exactly like a full one."""
     path = tmp_path / "short.rtt.i64"
     path.write_bytes(array("q", range(50)).tobytes())
@@ -126,7 +126,7 @@ def test_the_intended_time_series_exposes_a_stall_the_actual_time_series_hides()
     rate_hz, service_ns, stall_ns = 1_000, 100_000, 100_000_000
     period = 1_000_000_000 // rate_hz
     n = 1000
-    # The probe's own shape: three preallocated buffers filled by index (step 4 zero-allocation
+    # The probe's own shape: three preallocated buffers filled by index (§4.4 zero-allocation
     # sampling path), so this test drives `series` exactly as a real run does.
     intended_b, sent_b, done_b = (array("q", bytes(8 * n)) for _ in range(3))
     now = 0
@@ -279,7 +279,7 @@ def test_a_truncated_dump_is_refused(tmp_path: Path) -> None:
 def test_an_inter_sample_gap_over_a_second_flags_the_run() -> None:
     """A second of silence mid-run is not a latency measurement, it is a stopped process — a
     laptop that slept, a container that was throttled. Flagged rather than dropped: the run is
-    evidence of something, just not of latency."""
+    evidence of something, just not of latency (F-34)."""
     period, n = 1_000_000, 11
     sent = array("q", bytes(8 * n))
     for i in range(10):
@@ -328,8 +328,8 @@ def test_the_manifest_records_every_field_a_reader_needs_to_reproduce_the_run() 
         "affinity",
         "cpu_governor",
         "rejects",
-        # Both remaining benchmark gate inputs the client can know. `engine_sha256` is what
-        # makes the build identifiable; a matrix previously taken against a binary nobody could
+        # Both remaining §5.2 gate inputs the client can know. `engine_sha256` is what makes the
+        # build identifiable after the fact; a matrix was once taken against a binary nobody could
         # name afterwards, and only these two fields prevent a repeat.
         "gaps",
         "engine_sha256",
@@ -340,7 +340,7 @@ def test_the_manifest_records_every_field_a_reader_needs_to_reproduce_the_run() 
 
 
 def test_the_power_management_field_is_explicit_when_unreadable() -> None:
-    """Silence about the CPU governor reads as "controlled"; it usually is not. When the
+    """F-22. Silence about the CPU governor reads as "controlled"; it usually is not. When the
     value cannot be read the manifest says so in words rather than omitting the key."""
     captured = manifest.capture(
         stack="naive",
@@ -360,7 +360,7 @@ def test_the_power_management_field_is_explicit_when_unreadable() -> None:
 
 
 def test_a_run_with_rejects_is_not_primary_table_material() -> None:
-    """A reject means the message mix tripped an engine limit, so the pattern under
+    """F-07. A reject means the message mix tripped an engine limit, so the pattern under
     measurement is not the pattern intended."""
     assert manifest.qualifies_as_primary(rejects=0, saturated=0, gaps=False)
     assert not manifest.qualifies_as_primary(rejects=1, saturated=0, gaps=False)
@@ -404,7 +404,7 @@ def test_summarize_stamps_a_clean_run_as_primary(
     out = capsys.readouterr().out
     assert rc == 0
     assert "PRIMARY" in out and "NOT PRIMARY" not in out
-    assert "benchmark primary-table gate" in out
+    assert "§5.2 primary-table gate" in out
 
 
 def test_summarize_refuses_a_rejected_run_under_a_primary_table_claim(

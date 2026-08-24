@@ -6,7 +6,7 @@ negotiated compression extension, control-frame liveness, the reassembly cap, an
 codes this client sends on its own initiative.
 
 Both arms are driven through the SAME cases wherever the behaviour is shared, because the
-the A/B measurement is only like-for-like if the two stacks agree on all of it — a difference
+§6 measurement is only like-for-like if the two stacks agree on all of it — a difference
 here would mean the naive and tuned numbers came from clients that behave differently, not
 from clients that are the same client on different transports.
 
@@ -95,7 +95,7 @@ class FakeEngine:
         `json.loads` accepts both — so this double used to record a binary frame as happily as
         a text one, while the real engine closes 1002 on sight of it (`session.cpp`). That gap
         is exactly how the naive arm shipped sending every command as BINARY: the unit suite
-        was more permissive than the thing it stood in for, and only the demo's integration test
+        was more permissive than the thing it stood in for, and only Task 10's integration test
         against the real binary caught it. A double that accepts what the real peer rejects is
         worse than no double.
         """
@@ -221,12 +221,12 @@ async def test_no_compression_extension_is_negotiated(run_client: Runner, engine
     assert len(fake.received) == 2
 
 
-# --- the two-counter rule, injected at the wire -----------------------------------
+# --- the two-counter rule, injected at the wire (F-10) -----------------------------------
 
 
 @pytest.mark.parametrize("run_client", ARMS)
 async def test_an_envelope_seq_gap_closes_1002(run_client: Runner, engine: Starter) -> None:
-    """The client's verdict on the ENGINE's framing. 1002 is the design's normative code for
+    """The client's verdict on the ENGINE's framing. 1002 is the plan's normative code for
     it, and it must be distinguishable from the stale-stop's 4000."""
 
     async def script(fake: FakeEngine, ws: ServerConnection) -> None:
@@ -298,7 +298,7 @@ async def test_a_fragmented_message_past_the_cap_is_refused_tuned(engine: Starte
     per-frame cap alone is not a bound: two 40 KiB fragments are each legal and together
     exceed the 64 KiB the engine itself enforces.
 
-    1009, not 1002. This case asserted 1002 until the gate pointed out that the two
+    1009, not 1002. This case asserted 1002 until the Task 9 gate pointed out that the two
     codes say different things: a message past the cap is well-formed and TOO LARGE, which is
     the whole reason 1009 exists, and both libraries already answer a single oversized FRAME
     with it. Closing 1002 told the peer it had broken the framing rules when it had not, and
@@ -485,7 +485,7 @@ async def test_a_negotiated_extension_is_refused(run_client: Runner) -> None:
 async def test_the_sample_hook_sees_every_inbound_frame(
     run_client: Runner, engine: Starter
 ) -> None:
-    """`on_sample` is how the benchmark harness reads per-frame cost out of a live client. It is
+    """`on_sample` is how Task 11's harness reads per-frame cost out of a live client. It is
     optional, so both arms have a branch that skips it — and an optional hook nothing calls
     is an optional hook nobody notices breaking."""
     samples: list[tuple[str, int]] = []
@@ -596,7 +596,7 @@ async def test_a_second_connection_quotes_against_the_engine_s_new_epoch(
     assert [m["epoch"] for m in fake.received] == [2, 2]
 
 
-# --- what the gate found: arm divergence and lifecycle ----------------------------
+# --- what the Task 9 gate found: arm divergence and lifecycle ----------------------------
 #
 # Every case below pins a defect that shipped because nothing looked for it. They are grouped
 # here rather than scattered because they share one cause: `websockets` enforces RFC 6455 for
@@ -1388,20 +1388,19 @@ async def test_an_unresponsive_peer_gets_an_abrupt_teardown_tuned() -> None:
     assert transport.is_disconnected
 
 
-# --- the two arms must answer the SAME wire fault with the SAME code (review #12) ---
+# --- the two arms must answer the SAME wire fault with the SAME code (Task Z, codex #9/#12) ---
 
 
 async def test_invalid_utf8_in_a_text_frame_is_1007_not_1002() -> None:
     """RFC 6455 §8.1: a TEXT frame whose bytes are not valid UTF-8 is 1007, not 1002.
 
-    This is an A/B divergence caught in review. `websockets` decodes to `str` and
-    rejects the frame
+    This is the A/B divergence codex found. `websockets` decodes to `str` and rejects the frame
     itself, so the naive arm produced 1007; picows hands up raw bytes, which reached the JSON
     decoder, failed there, and were latched 1002 — "you broke the framing" for what is actually
     "your text is not text". The engine answers 1007 too (Beast's `close_code::bad_payload`), so
     before this the TUNED arm was the only one of the three that disagreed.
 
-    It matters beyond the code being wrong: the two arms are the A/B A/B, so a peer that sends
+    It matters beyond the code being wrong: the two arms are the §6 A/B, so a peer that sends
     one bad byte gets a different verdict depending on which arm is being measured.
     """
     listener, transport = _listener()
@@ -1426,7 +1425,7 @@ async def test_valid_utf8_that_is_bad_json_is_still_1002() -> None:
 
 
 async def test_a_ping_after_our_close_is_not_answered_because_picows_drops_it() -> None:
-    """the tuned arm CLAIMED to answer a PING after sending CLOSE, and the only test
+    """codex #12: the tuned arm CLAIMED to answer a PING after sending CLOSE, and the only test
     covering it used a fake transport that never set `is_close_frame_sent` — so it asserted a
     reply the real library discards.
 
@@ -1527,7 +1526,7 @@ async def test_invalid_utf8_in_a_text_frame_is_1007_naive(engine: Starter) -> No
     (INVALID_DATA), and the arm latches that as a local verdict so the session ends DECIDED.
 
     Same input as the tuned unit case (`0xFF` in a TEXT frame). Both arms must answer 1007 so
-    the A/B A/B cannot attribute a code difference to the stack under measurement.
+    the §6 A/B cannot attribute a code difference to the stack under measurement.
     """
 
     async def script(fake: FakeEngine, ws: ServerConnection) -> None:
@@ -1622,3 +1621,34 @@ def test_outbound_seq_at_uint64_max_still_encodes() -> None:
 
     blob = encode(CancelOrder(v=1, seq=2**64 - 1, epoch=1, cl_id="C-1"))
     assert b"18446744073709551615" in blob
+
+
+def test_apply_tcp_nodelay_picows_and_naive() -> None:
+    """Pins that _apply_tcp_nodelay configures TCP_NODELAY when socket is present
+    and handles None."""
+    import socket
+    from unittest.mock import MagicMock
+
+    # Test picows helper with valid socket
+    mock_sock = MagicMock()
+    mock_transport = MagicMock()
+    mock_transport.underlying_transport.get_extra_info.return_value = mock_sock
+    ws_picows._apply_tcp_nodelay(mock_transport)
+    mock_sock.setsockopt.assert_called_once_with(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+
+    # Test picows helper with None socket
+    mock_transport_none = MagicMock()
+    mock_transport_none.underlying_transport.get_extra_info.return_value = None
+    ws_picows._apply_tcp_nodelay(mock_transport_none)
+
+    # Test naive helper with valid socket
+    mock_ws = MagicMock()
+    mock_sock_naive = MagicMock()
+    mock_ws.transport.get_extra_info.return_value = mock_sock_naive
+    ws_naive._apply_tcp_nodelay(mock_ws)
+    mock_sock_naive.setsockopt.assert_called_once_with(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+
+    # Test naive helper with None socket
+    mock_ws_none = MagicMock()
+    mock_ws_none.transport.get_extra_info.return_value = None
+    ws_naive._apply_tcp_nodelay(mock_ws_none)

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One benchmark matrix pass: both stacks × {idle, react, paced} × N interleaved repeats.
+# One §5.2 matrix pass: both stacks × {idle, react, paced} × N interleaved repeats.
 #
 # INTERLEAVED A,B,A,B,A,B rather than all-A-then-all-B (record E-3). Running one arm to
 # completion and then the other makes the comparison hostage to anything that drifts over the
@@ -7,15 +7,15 @@
 # puts both arms on both sides of every drift, so a difference that survives is a difference
 # between the arms rather than between two halves of an afternoon.
 #
-# ENGINE RESTARTED PER RUN, on an ephemeral port. A shared engine would carry one run's
+# ENGINE RESTARTED PER RUN, on an ephemeral port (F-09). A shared engine would carry one run's
 # BenchRecorder state into the next, and a fixed port makes two concurrent passes fight over it.
 #
-# SIGTERM, NEVER SIGKILL. The engine writes its `--bench-out` dump during graceful
+# SIGTERM, NEVER SIGKILL (F-34/F-36). The engine writes its `--bench-out` dump during graceful
 # shutdown, so killing it hard destroys the artifact the whole run existed to produce. The script
 # signals, then WAITS for the dump to appear before treating the run as finished.
 #
 # Usage:  scripts/run_bench.sh [repeats] [samples] [warmup]
-#   defaults: 3 repeats, 100000 samples, 10000 warm-up (the primary sample floor)
+#   defaults: 3 repeats, 100000 samples, 10000 warm-up (the §5.2 primary floor)
 #   MM_ENGINE=path  overrides the binary.
 set -euo pipefail
 
@@ -124,7 +124,7 @@ acquire_bench_lock
 # point the real orphan it exists to catch sails through. `-x` matches the process NAME exactly,
 # which is the thing actually being asked about.
 #
-# LIMITATION (measured in a host-contamination study): host `pgrep` cannot see engines inside a
+# LIMITATION (measured, GROK_INVESTIGATION.md): host `pgrep` cannot see engines inside a
 # container. The matrix lock above is what stops contamination #4; this check still catches
 # host-side orphans from a non-containerised pass.
 if orphans="$(pgrep -x "$(basename "$ENGINE")" 2>/dev/null)" && [[ -n "$orphans" ]]; then
@@ -138,10 +138,10 @@ fi
 # REFUSE TO MEASURE ON A BUSY HOST (pre-flight). The orphan-engine check above only knows
 # about host-visible engines. Concurrent work still matters:
 #   * Run 2: the project's own test suite mid-matrix → a 63 ms stall.
-#   * Run 3: a review agent building images; paced_naive R2 alone had 108 samples >5 ms
+#   * Run 3: a grok agent building images; paced_naive R2 alone had 108 samples >5 ms
 #     while wall time was IDENTICAL to siblings (110.002 s) — pre-flight load was the
 #     only host signal elevated (8.46).
-#   * burn experiment (one foreign container): one foreign container at ~1 core
+#   * EXP burn_1x1 (GROK_INVESTIGATION.md): one foreign container at ~1 core
 #     (container_cpu_sum ≈ 112%, host load ≈ 4.1 < ncpu/4=8) moved paced_tuned p99.9
 #     from ~180 µs to 12.8 ms on ONE of three peers. Load did NOT fire; container CPU did.
 #
@@ -153,7 +153,7 @@ fi
 # TWO PRE-FLIGHT SIGNALS, both overridable, both loud when overridden:
 #   1. Container CPU IMPACT (docker stats), NOT container COUNT.
 #      Threshold CONTAINER_CPU_BUSY_PCT — MEASURED (exp series in
-#      the host-contamination study):
+#      scripts/investigate_artifacts/, GROK_INVESTIGATION.md §thresholds):
 #        * Quiet permanent infra (k8s staging + CI proxy + idle buildx): 16–20% of one core.
 #        * Half-core synthetic burner alone: ≈50% of one core (docker stats).
 #        * One-core synthetic burner: ≈100–115% total; produced severe tail damage.
@@ -229,7 +229,7 @@ run_bounded() {
 
 # docker stats CPU% is "% of one core". Sum across all running containers.
 # Threshold 50: measured quiet infra 16–20%; 1-core burner ~112% wrecked p99.9
-# (controlled burn experiment). Thresholds were calibrated by controlled burn experiments.
+# (scripts/investigate_artifacts/exp_burn_1x1). See GROK_INVESTIGATION.md.
 CONTAINER_CPU_BUSY_PCT=50
 # Probe budget: docker stats --no-stream samples once; healthy daemon is sub-second to a few
 # seconds. 15s is well above healthy, well below "wedged forever".
@@ -243,7 +243,7 @@ busy_host_banner() {
     printf '\n'
     printf '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n'
     printf '!!  BENCH_ALLOW_* OVERRIDE ACTIVE — NUMBERS ARE NOT PRIMARY-TABLE     !!\n'
-    printf '!!  MATERIAL. Do not publish this run into the benchmark matrix.           !!\n'
+    printf '!!  MATERIAL. Do not publish this run into the §5.2 matrix.           !!\n'
     printf '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n'
     printf '\n'
   fi
@@ -373,7 +373,7 @@ note() { printf '   %s\n' "$*"; }
 
 # Starts an engine and publishes BOTH the pid and the port it bound through GLOBALS.
 #
-# WHY GLOBALS AND NOT AN ECHOED PORT. This function
+# WHY GLOBALS AND NOT AN ECHOED PORT (F-41, and it cost the whole first matrix). This function
 # used to `echo "$port"` and be called as `port="$(start_engine ...)"`. Command substitution runs
 # its body in a SUBSHELL, so `ENGINE_PID=$!` was assigned in a child and the parent's ENGINE_PID
 # stayed empty forever. Everything downstream that guards on it then became a no-op:
@@ -381,7 +381,7 @@ note() { printf '   %s\n' "$*"; }
 #   * `stop_engine_and_wait_for_dump` opens with `[[ -n "$ENGINE_PID" ]] || return 0`, so it
 #     returned IMMEDIATELY — the engine was never signalled, never shut down gracefully, and
 #     therefore never wrote its `--bench-out` dump. Every dump in every run was 0 bytes, which
-#     is to say the measurement-spec M3 measurement did not exist while appearing to.
+#     is to say the §5.1 M3 measurement did not exist while appearing to.
 #   * it also returned before its own "no bench dump" warning, so the failure was silent.
 #   * the `cleanup` EXIT trap was dead for the same reason, so every engine LEAKED. Each one
 #     keeps publishing on its `--interval-ms` timer with no client attached, so a pass of N runs
@@ -429,7 +429,7 @@ start_engine() {
 # Signals the engine and waits for its dump, so a run is not called finished before its artifact
 # exists. A dump that is still growing is worse than a missing one: it looks complete.
 #
-# A MISSING DUMP NOW FAILS THE RUN (nonzero return) rather than printing a note. measurement-spec requires M3,
+# A MISSING DUMP NOW FAILS THE RUN (nonzero return) rather than printing a note. §5.1 requires M3,
 # which lives only in this artifact, so a run without one has not produced the measurement it was
 # asked for. The previous `note` was unreachable anyway (see start_engine), and even reachable it
 # would have been the wrong severity: 22 warnings scrolled past under a closing `runs_ok=22`
@@ -498,14 +498,14 @@ one_run() {
 
   case "$mode" in
     # The idle feed opens a 3 s connect window, publishes ONE book, then goes silent for an
-    # hour: M1 is measured with no market-data work on the owner thread at all (the design record).
+    # hour: M1 is measured with no market-data work on the owner thread at all (record A3).
     idle)  feed="$REPO/bench/scenarios/bench_idle.feed";  interval=1; loop_flag="" ;;
     # react and paced both need a book on every tick, which is what bench_paced.feed under
     # --loop delivers at --interval-ms 1 (≈1k TOB/s).
     *)     feed="$REPO/bench/scenarios/bench_paced.feed"; interval=1; loop_flag="--loop" ;;
   esac
 
-  # THE ENGINE'S CODEC IS THE ARM, exactly as the design decision ratifies it: the A/B swap is
+  # THE ENGINE'S CODEC IS THE ARM, exactly as the decision record ratifies it: the §6 swap is
   # `websockets + asyncio + stdlib json + nlohmann` -> `picows + uvloop + msgspec + glaze` on the
   # SAME BINARY via the codec flag (02-decision-record.md). The C++ leg therefore has to move with
   # the Python leg; holding it at one codec measures three of the four components.
@@ -543,7 +543,7 @@ one_run() {
   return 0  # a failed run is recorded and skipped, never fatal to the pass
 }
 
-say "benchmark matrix — $REPEATS repeats, $WARMUP warm-up + $SAMPLES samples, out=$OUT"
+say "§5.2 matrix — $REPEATS repeats, $WARMUP warm-up + $SAMPLES samples, out=$OUT"
 note "engine: $($ENGINE --version | head -1) / $($ENGINE --version | sed -n '2p')"
 
 # PRIMARY tables. Interleaved per repeat so the two arms share every drift.
@@ -555,7 +555,7 @@ for r in $(seq 1 "$REPEATS"); do
   done
 done
 
-# SECONDARY probes, labelled non-primary in every table: they answer "do queues build",
+# SECONDARY probes, labelled non-primary in every table (F-10): they answer "do queues build",
 # not "what is p99". One repeat each — a percentile is not being claimed.
 say "Secondary probes (non-primary: saturation behaviour, not percentiles)"
 for stack in naive tuned; do
@@ -580,7 +580,7 @@ fi
 # paced contamination that leaves wall time unchanged (contamination #3: 108 samples
 # >5 ms, wall identical). scripts/bench_peer_audit.py compares primary (R*) peers on
 # wall_s and n_above_5ms. Thresholds measured on the authoritative matrix + controlled
-# burns — see the calibration notes above. Does not rewrite artifacts; refuses to call the
+# burns — see GROK_INVESTIGATION.md. Does not rewrite artifacts; refuses to call the
 # matrix primary-table clean.
 say "Post-hoc peer audit (wall + >5ms cluster vs siblings)"
 PEER_RC=0

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 project(mm_engine VERSION 0.1.0 LANGUAGES CXX)
 
 # C++20 is the project default. The ONE documented deviation is the glaze codec TU
-# (cpp/src/codec_glaze.cpp): glaze 7.9.x requires C++23, so that single
+# (cpp/src/codec_glaze.cpp, added in Task 2): glaze 7.9.x requires C++23, so that single
 # source file is compiled with CXX_STANDARD 23 below. Everything else stays C++20.
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -19,14 +19,15 @@ include(FetchContent)
 # GIT_SHALLOW (glaze, Catch2): both pins are release tags (not commit hashes), so a depth-1
 # clone is valid and sufficient. CMake emits `--depth 1 --no-single-branch`, so every branch
 # tip still lands at depth 1 — measured residual .git: catch2 9.5 MB + glaze 6.6 MB ≈ 16 MB
-# per build tree (review finding).
-# nlohmann_json is fetched as the release ARCHIVE instead (review finding): its shallow
+# per build tree (gate finding; the --no-single-branch flag is CMake's, not ours — a
+# single-branch clone is not available through FetchContent's git path).
+# nlohmann_json is fetched as the release ARCHIVE instead (gate finding, P4-i2): its shallow
 # clone still dragged 30 branch tips / 177 MB of .git through --no-single-branch, while the
 # release tarball is ~112 KB and the URL_HASH pin is strictly stronger provenance than a
 # movable tag.
 # SYSTEM (CMake >= 3.25; we require 3.28): third-party headers reach our
 # -Wall -Wextra -Wpedantic TUs via -isystem instead of plain -I, keeping warnings scoped
-# to first-party code (review finding).
+# to first-party code (gate finding).
 FetchContent_Declare(nlohmann_json
   URL      https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
   URL_HASH SHA256=42f6e95cad6ec532fd372391373363b62a14af6d771056dbfc86160e6dfff7aa
@@ -45,7 +46,8 @@ FetchContent_Declare(Catch2
   SYSTEM)
 FetchContent_MakeAvailable(nlohmann_json glaze Catch2)
 
-# Shared usage requirements (review finding).
+# Shared usage requirements (gate finding: warnings/includes/deps were hand-duplicated
+# across four targets and would silently drift as mm_core grows).
 #   mm_warnings — the warning set every first-party target compiles with.
 #   mm_common   — the public include dir + header-only deps every first-party target uses.
 # Neither carries a compile-feature requirement, so the C++23 isolation of mm_codec_glaze
@@ -57,8 +59,9 @@ target_include_directories(mm_common INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/cpp/i
 target_link_libraries(mm_common INTERFACE Boost::headers Threads::Threads)
 
 # Core library: pure logic + codecs; later tasks append sources.
-# frame_preflight.cpp is the shared frame authority BOTH codec arms call (review finding).
-# server.cpp / server_accept.cpp / session.cpp: the Beast server split under the
+# frame_preflight.cpp is the shared frame authority BOTH codec arms call (gate P4-i1
+# split it out of codec_nlohmann.cpp; addition to the plan's Task 2 file map).
+# server.cpp / server_accept.cpp / session.cpp: the Task 7 Beast server split under the
 # 500-line file cap along its ownership seams — server.cpp owns process lifecycle, the
 # feed driver and the telemetry pump; server_accept.cpp owns the listen loop and the
 # HTTP/WebSocket upgrade (split off at gate R1, when pending-upgrade tracking, admission
@@ -80,10 +83,10 @@ add_library(mm_core STATIC
 target_link_libraries(mm_core PUBLIC mm_common PRIVATE mm_warnings
   nlohmann_json::nlohmann_json)
 
-# Documented deviation (design decision: glaze codec TU is C++23; the rest of the tree is C++20).
+# Documented deviation (decision record: glaze codec TU is C++23; the rest of the tree is C++20).
 # CXX_STANDARD is a TARGET property — setting it per-source via set_source_files_properties is
-# a silent no-op (review finding). The C++23 TU therefore lives in its own OBJECT
-# library carrying the property for real; its objects fold into mm_core. This is
+# a silent no-op (codex gate finding, Task 0). The C++23 TU therefore lives in its own OBJECT
+# library carrying the property for real; its objects fold into mm_core. Task 2's step 4
 # verified TWO-SIDEDLY in compile_commands.json: "-std=c++23" appears on the codec_glaze.cpp
 # TU AND every other cpp/src/*.cpp entry still carries "-std=c++20" (one-sided checking is
 # unfalsifiable against feature-propagation leaks — gate finding).
@@ -101,7 +104,7 @@ target_sources(mm_core PRIVATE $<TARGET_OBJECTS:mm_codec_glaze>)
 
 add_executable(mm_engine cpp/src/main.cpp)
 # Single source of truth for the C++ version string is project(VERSION) above. The compiler
-# and flag stamps below are what `--version` prints and what the benchmark benchmark manifest
+# and flag stamps below are what `--version` prints and what the §5.2 benchmark manifest
 # records: a latency table is not reproducible without knowing which compiler, at which
 # optimization level, built the binary that produced it. Read from the BINARY rather than
 # re-derived by the harness, so a stale build cannot be reported as a fresh one.
@@ -122,17 +125,17 @@ target_link_libraries(mm_engine PRIVATE mm_core mm_warnings)
 
 enable_testing()
 # test_codec_equivalence.cpp (+ the shared codec_test_support.hpp) splits the codec suite
-# under the 500-line file cap (addition to the design's file map, same rationale as the
+# under the 500-line file cap (addition to the plan's Task 2 file map, same rationale as the
 # frame_preflight.cpp source split above). The engine suite is split the same way, along
 # behavioral seams: lifecycle / session lifetime / fill rule (+ the shared
 # engine_test_support.hpp). The allocation cases (the engine inventory + injection cases in
-# test_engine_alloc.cpp, the Outbox cases in test_outbox_alloc.cpp) all arm ONE global
+# test_engine_alloc.cpp, Task 6's Outbox cases in test_outbox_alloc.cpp) all arm ONE global
 # operator new replacement — REPLACING it (to count and, armed, to FAIL allocations) is a
 # whole-binary property that belongs in exactly one TU, so it is DEFINED once in
 # alloc_probe.cpp (probe state + replacement, shared via alloc_probe_support.hpp) rather than
 # behind a test-only allocator seam on the shipped mm::Outbox — one harness, no production
-# API widened for a test. All four additions to the design's file map are queued in
-# the limitations backlog; the alloc-probe split's three files in item (r).
+# API widened for a test. All four additions to the plan's Task 3 file map are queued in
+# docs/PENDING_AMENDMENTS.md (h); the alloc-probe split's three files in item (r).
 add_executable(mm_tests
   cpp/tests/alloc_probe.cpp
   cpp/tests/test_types.cpp
@@ -156,10 +159,13 @@ add_executable(mm_tests
   cpp/tests/test_server_flow.cpp
   cpp/tests/test_server_shutdown.cpp
   cpp/tests/test_server_artifacts.cpp
-  cpp/tests/test_bench_recorder.cpp)
-# tests/golden/ (repo root) is the cross-language contract — Python reads the same
+  cpp/tests/test_bench_recorder.cpp
+  cpp/tests/test_shm_ring.cpp
+  cpp/tests/test_strategy_native.cpp
+  cpp/tests/test_simd_pricing.cpp)
+# tests/golden/ (repo root) is the cross-language contract — Python Task 4 reads the same
 # files; the absolute path keeps ctest working from any build dir. bench/scenarios/ is the
-# same idea for the feed: the SHIPPED scenario files are pinned event-for-event, so
+# same idea for the Task 5 feed: the SHIPPED scenario files are pinned event-for-event, so
 # the tests must read the very files the demo and the benchmarks run, not copies.
 target_compile_definitions(mm_tests PRIVATE
   MM_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/golden"
@@ -192,7 +198,7 @@ include(Catch)
 # (scripts/verify_linux.sh --platform linux/amd64) sanitizer cases run an order of
 # magnitude slower and the margin is single digits: a case added near that ceiling should
 # raise the bound, not trust the native margin. The mechanized every-discovered-test-
-# carries-TIMEOUT check is queued (the limitations backlog).
+# carries-TIMEOUT check is queued for Task 12 (docs/PENDING_AMENDMENTS.md (s)15).
 catch_discover_tests(mm_tests PROPERTIES TIMEOUT 60)
 
 # The session write path's / TOB fan-out's allocation discipline, measured against a live
@@ -215,13 +221,14 @@ add_test(NAME server_tick_path_allocations COMMAND mm_session_alloc_probe)
 set_tests_properties(server_tick_path_allocations PROPERTIES TIMEOUT 300)
 
 # The mm_engine BINARY's own fixture — until it was added, nothing in the repository ran
-# mm_engine at all, so cpp/src/main.cpp (the CLI surface, the one-line-plus-exit-2 ops
+# mm_engine at all, so cpp/src/main.cpp (the CLI surface, the F-12 one-line-plus-exit-2 ops
 # contract, the startup/shutdown line formats, the admission defaults) was pinned by
-# nothing. Plan requires the flag surface to hold, which makes it a contract
+# nothing. Plan Task 11 Step 0 requires the flag surface to hold, which makes it a contract
 # and not a convenience.
 # REQUIRED, deliberately: guarding the registration on an optional interpreter would let
 # main.cpp's ONLY automated coverage disappear from a tree that merely lacks python3 —
-# silently, and with a green ctest. The project already ships a Python client arm # and the authoritative container installs python3 in the same layer as the compiler, so
+# silently, and with a green ctest. The project already ships a Python client arm (Task 4)
+# and the authoritative container installs python3 in the same layer as the compiler, so
 # this adds no dependency the repository did not already have. Interpreter only: the fixture
 # imports nothing outside the standard library.
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
@@ -240,7 +247,8 @@ set_tests_properties(mm_engine_cli PROPERTIES TIMEOUT 300)
 # correctness set — a scheduler preemption on a loaded host must never red a
 # correctness gate. It stays ENFORCED by an automated run through the explicit
 # registration below: label `perf`, excluded by the default test presets and run via
-# `ctest --preset perf` (running it routinely is queued in the backlog. Its only other tag is `[perf]` — deliberately NOT the
+# `ctest --preset perf` (the Task 12/13 obligation to run it is queued in
+# docs/PENDING_AMENDMENTS.md). Its only other tag is `[perf]` — deliberately NOT the
 # `[engine]` tag the correctness engine cases carry, because `[.]` hides a case from the
 # UNFILTERED run only: Catch2 still selects hidden cases that MATCH an explicit spec, so
 # a targeted `./mm_tests "[engine]"` in any build tree would otherwise reach it. The case
@@ -256,3 +264,26 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
   add_test(NAME engine_history_scaling COMMAND mm_tests "[perf]")
   set_tests_properties(engine_history_scaling PROPERTIES LABELS perf)
 endif()
+
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bench/probes/shm_rtt_probe.cpp")
+  add_executable(shm_rtt_probe bench/probes/shm_rtt_probe.cpp)
+  target_link_libraries(shm_rtt_probe PRIVATE mm_core mm_warnings)
+endif()
+
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bench/probes/native_mm_probe.cpp")
+  add_executable(native_mm_probe bench/probes/native_mm_probe.cpp)
+  target_link_libraries(native_mm_probe PRIVATE mm_core mm_warnings)
+endif()
+
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bench/probes/simd_pricing_probe.cpp")
+  add_executable(simd_pricing_probe bench/probes/simd_pricing_probe.cpp)
+  target_link_libraries(simd_pricing_probe PRIVATE mm_core mm_warnings)
+endif()
+
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bench/probes/one_way_decomp_probe.cpp")
+  add_executable(one_way_decomp_probe bench/probes/one_way_decomp_probe.cpp)
+  target_link_libraries(one_way_decomp_probe PRIVATE mm_core mm_warnings)
+endif()
+
+
+

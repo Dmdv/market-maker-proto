@@ -1,4 +1,4 @@
-// tests: the per-session Outbox and its asymmetric backpressure policy (the design).
+// Task 6 tests: the per-session Outbox and its asymmetric backpressure policy (record D6).
 //
 // The policy IS the deliverable here, and it is deliberately asymmetric, so every RULE gets
 // its own case and every case is written to be FALSIFIABLE — deleting the rule from
@@ -19,8 +19,10 @@
 // cases — the static_asserts after these comments: the noexcept trio, plus (hardgate-fix-2)
 // two exact member-pointer pins that red the build the moment either push gains ANY
 // overload — and one more is pinned by the call sites themselves: `push_report` binds ONLY
-// a named lvalue, so every case below names the
-// report it pushes and passes it without a move — the same call form the server layer's write path
+// a named lvalue (hard gate; a prvalue or a
+// `std::move`d handoff no longer compiles, because under the previous `OutMsg &&` binding
+// those forms died in the unwind on bad_alloc, unretryable), so every case below names the
+// report it pushes and passes it without a move — the same call form Task 7's write path
 // uses.
 //
 // The ALLOCATION rules of the set are pinned in a different TU: "a report the queue could not
@@ -32,10 +34,10 @@
 // select them with the cases below; that TU also pins the tick-path and supersession-burst
 // zeros and the report-path churn bounds, and cases the valueless-report guard.
 //
-// Values are asserted on STRUCT FIELDS, never on encoded strings: the Outbox
+// Values are asserted on STRUCT FIELDS, never on encoded strings (audit F-06): the Outbox
 // holds typed messages precisely so the frame — and the envelope `seq` in it — is produced at
 // pop time by the session. A string-level assertion here would pass just as happily against
-// the pre-encoded design rejected.
+// the pre-encoded design F-06 rejected.
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_exception.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -51,8 +53,8 @@
 #include <utility>
 #include <variant>
 
-// Signature pins, compile-time: `pop()` and `push_tob()` are noexcept — the server
-// layer calls both from asio completion handlers, where an escaping exception terminates the
+// Signature pins, compile-time (hard gate): `pop()` and `push_tob()` are noexcept — Task 7
+// calls both from asio completion handlers, where an escaping exception terminates the
 // process — and `push_report()` is deliberately NOT noexcept: its programming-error guards
 // throw, and that is its contract. Deleting either `noexcept` reds the build here, the same
 // falsifiability discipline the runtime cases follow. (The four deleted copy/move members
@@ -101,7 +103,7 @@ mm::OutMsg ack(std::string cl_id) {
 // about every one of them, not just the acknowledgement the FIFO cases happen to use. Each
 // field is set to a distinct non-default value so a round trip that loses or rewrites one is
 // visible; the envelope (`v`, `seq`, `epoch`) is deliberately LEFT AT ITS DEFAULT, because
-// says the Outbox writes to no message field and the session stamps `seq` at pop.
+// F-06 says the Outbox writes to no message field and the session stamps `seq` at pop.
 mm::CancelAck cancel_ack() {
   mm::CancelAck m;
   m.cl_id = "c-cancel";
@@ -129,7 +131,7 @@ mm::Fill fill() {
   return m;
 }
 
-// The cl_id an OrderAck carries, read off the STRUCT.
+// The cl_id an OrderAck carries, read off the STRUCT (F-06 again — never off an encoded frame).
 std::string cl_id_of(const mm::OutMsg &m) {
   const auto *a = std::get_if<mm::OrderAck>(&m);
   return a != nullptr ? a->cl_id : "<not-an-order-ack>";
@@ -199,7 +201,7 @@ TEST_CASE("outbox: reports pop in FIFO order", "[outbox]") {
 TEST_CASE("outbox: every report alternative round-trips field for field", "[outbox]") {
   // "Reports are never dropped" covers ALL FOUR non-Tob alternatives, not just the OrderAck
   // the ordering cases use — an implementation that swallowed or rewrote a Fill would still
-  // satisfy every FIFO assertion in this file. Full-struct equality also pins on the
+  // satisfy every FIFO assertion in this file. Full-struct equality also pins F-06 on the
   // REPORT path (the conflation case pins it on the tick path): each original leaves the
   // envelope at its default, so a push_report that stamped `seq` would break equality here.
   const mm::OrderAck a = std::get<mm::OrderAck>(ack("c-ack"));
@@ -224,7 +226,7 @@ TEST_CASE("outbox: every report alternative round-trips field for field", "[outb
   CHECK(popped<mm::CancelAck>(o) == c);
   CHECK(popped<mm::Reject>(o) == r);
   // Spelled out as well as compared: the envelope is the session's to stamp at pop time, and
-  // the Outbox never touches it — the report-path half of .
+  // the Outbox never touches it — the report-path half of F-06.
   const auto popped_fill = popped<mm::Fill>(o);
   CHECK(popped_fill == f);
   CHECK(popped_fill.v == 1);
@@ -275,7 +277,7 @@ TEST_CASE("outbox: conflation gaps md_seq and never the envelope seq", "[outbox]
   // deliberate conflation (benign), an envelope-seq gap is transport loss (fatal, close
   // 1002). That distinction survives only because the Outbox holds a TYPED message and the
   // session stamps `seq` at pop — a pre-encoded frame would have burnt a seq on each
-  // superseded tick and manufactured the fatal gap.
+  // superseded tick and manufactured the fatal gap (F-06).
   mm::Outbox o;
   o.push_tob(tob(7, 100, 110));
   o.push_tob(tob(9, 102, 112)); // md_seq 8 was never produced; 7 is conflated away here
@@ -342,7 +344,7 @@ TEST_CASE("outbox: a tick pushed into a freed slot is not a conflation", "[outbo
   CHECK(o.depth() == 1);
 }
 
-TEST_CASE("outbox: the default report mark is the 1024", "[outbox]") {
+TEST_CASE("outbox: the default report mark is record D6's 1024", "[outbox]") {
   // Pinned against the LITERAL and on its own, because every behavioural case below derives
   // its oracle from the constant: without this, moving the mark off the record's value would
   // leave the entire file green while the shipped session closed at the wrong depth. A
@@ -354,7 +356,7 @@ TEST_CASE("outbox: the default report mark is the 1024", "[outbox]") {
 
 TEST_CASE("outbox: the report mark breaches at 1025 and drops nothing", "[outbox]") {
   // The three observations that fix the boundary exactly — 1023 below it, 1024 ON it, 1025
-  // past it — spelled as literals against the mark. The breach is a CLOSE signal
+  // past it — spelled as literals against record D6's mark. The breach is a CLOSE signal
   // (1008), never a drop: all 1025 reports are still there, in order, afterwards.
   mm::Outbox o;
   for (std::size_t i = 1; i <= 1023; ++i) {
@@ -410,7 +412,7 @@ TEST_CASE("outbox: reports pushed AFTER the breach are still queued, in order", 
   // shed that started past `2 * report_hwm_` satisfied it while silently destroying every
   // report from the 9th on; the depth a slow socket reaches is unbounded, so the sample must
   // sit far past any plausible multiple-of-the-mark shed point. A dropped report leaves the
-  // order's state undefined, which is the one outcome the design spends a whole close code
+  // order's state undefined, which is the one outcome record D6 spends a whole close code
   // (1008) to avoid.
   mm::Outbox o{4};
   for (std::size_t i = 1; i <= 5; ++i) {

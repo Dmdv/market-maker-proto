@@ -2,7 +2,7 @@
 """Re-runnable probe behind every absolute figure `mmclient/protocol.py` quotes.
 
 Design-time probe, min of 7 x N iterations, never a deliverable number — the deliverable
-latency matrix is the harness's `bench/results/`, produced by `scripts/run_bench.sh` under the
+latency matrix is Task 13's `bench/results/`, produced by `scripts/run_bench.sh` under the
 pinned container. What this answers is narrower and is what the module's comments claim:
 the codec's own cost on the canonical frame, the split between the shared preflight and
 each arm's library work, the worst case the ONE remaining bound — the transport's 64 KiB
@@ -11,7 +11,7 @@ per-character form it replaced.
 
 The worst-case block is the reason this file must keep being run rather than quoted. The
 Task-4 gate removed the scan-token budget, the per-token byte charge and the escape cap as
-accept-set divergences from `cpp/src/frame_preflight.cpp` (the limitations backlog), so the
+accept-set divergences from `cpp/src/frame_preflight.cpp` (PENDING_AMENDMENTS (p)7), so the
 frames that block measures are no longer boundary cases of a cap this client chose: they are
 simply the most expensive things the wire can carry, and their cost is a fact about pure
 Python rather than a number anyone picked.

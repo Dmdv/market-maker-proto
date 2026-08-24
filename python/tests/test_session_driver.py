@@ -1,7 +1,7 @@
 """The transport-independent session driver, tested without a socket.
 
 `SessionDriver` is the half both adapters share, so a defect here is a defect in BOTH arms
-of the A/B measurement at once — and the close-code arithmetic it owns is what an operator
+of the §6 measurement at once — and the close-code arithmetic it owns is what an operator
 reads to tell a strategy decision from a transport fault. Driven with bytes and integers
 directly: it holds no socket and no clock, which is exactly what makes that possible.
 """

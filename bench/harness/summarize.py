@@ -1,4 +1,4 @@
-"""Turns raw latency samples into the tables benchmark asks for, and refuses runs that cannot back
+"""Turns raw latency samples into the tables §5.2 asks for, and refuses runs that cannot back
 them.
 
 Reads two kinds of artifact: the client's own `.i64` files (raw little-endian int64 nanoseconds,
@@ -58,7 +58,7 @@ GAP_THRESHOLD_NS = 1_000_000_000
 
 @dataclass(frozen=True)
 class Stats:
-    """One series, summarised. The fields benchmark names, and nothing derived."""
+    """One series, summarised. The fields §5.2 names, and nothing derived."""
 
     count: int
     min: int
@@ -126,7 +126,7 @@ def drop_warmup(samples: array[int], warmup: int) -> array[int]:
 
     By count rather than by elapsed time because the engine's streams carry no timestamps to
     filter on, and client and engine cycles correspond 1:1 in idle and react modes — so one rule
-    covers both sides of the measurement.
+    covers both sides of the measurement (audit F-27).
 
     Refuses to drop more than exists: returning an empty series would report a run that measured
     nothing as a run that measured cleanly.
@@ -162,7 +162,7 @@ def series(
 
     Takes the probe's three PREALLOCATED stamp buffers and the number of cycles actually recorded,
     rather than a list of per-cycle objects. The buffers are sized for the whole run up front
-    (step 4: zero allocation on the hot path), so they are longer than `count` whenever a run ends
+    (§4.4: zero allocation on the hot path), so they are longer than `count` whenever a run ends
     early — everything past `count` is the zero fill and must not reach a percentile.
     """
     if not 0 <= count <= min(len(intended), len(sent), len(done)):
@@ -184,7 +184,7 @@ def gaps_over(sent: array[int], count: int, threshold_ns: int = GAP_THRESHOLD_NS
 
     A second of silence mid-run is a stopped process — a laptop that slept, a container that was
     throttled, a GC pause of a kind Python does not have. FLAGGED rather than dropped: the run
-    is evidence of something, just not of latency.
+    is evidence of something, just not of latency (F-34).
 
     `count` bounds the scan for the same reason as in `series`: the tail of the preallocated
     buffer is zeros, and a zero send stamp beside a real one is a gap of the whole run's length.
@@ -296,7 +296,7 @@ def _engine_tables(dump: EngineDump, *, warmup: int, mode: str, markdown: bool) 
 
     Idle echoes one stale `md_seq` for the whole run and paced measures its own pacing phase, so
     an M3 table from either is a number about the harness rather than about the system — which is
-    exactly the shape of claim benchmark exists to prevent.
+    exactly the shape of claim §5.2 exists to prevent.
     """
     tables: list[str] = []
     if len(dump.svc):
@@ -334,7 +334,7 @@ def _sibling_manifest(rtt: Path) -> Path:
 def _primary_verdict(
     *, manifest_path: Path, saturated: int | None, markdown: bool
 ) -> tuple[str, bool | None]:
-    """Apply the primary-table gate and render it as a block.
+    """Apply the §5.2 primary-table gate and render it as a block.
 
     Returns `(block, qualified)`, where `qualified` is None when the verdict CANNOT be reached
     because an input is missing. That third state matters: "not shown to qualify" and "shown not
@@ -385,15 +385,15 @@ def _primary_verdict(
     if markdown:
         body = "\n".join(f"| {name} | {value} | {want} |" for name, value, want in rows)
         return (
-            "**run quality (benchmark primary-table gate)**\n\n"
+            "**run quality (§5.2 primary-table gate)**\n\n"
             "| input | value | required |\n| --- | --- | --- |\n" + body + f"\n\n**{verdict}**"
         ), qualified
     body = "\n".join(f"  {name:<24} {value:<10} (required: {want})" for name, value, want in rows)
-    return f"run quality (benchmark primary-table gate)\n{body}\n  => {verdict}", qualified
+    return f"run quality (§5.2 primary-table gate)\n{body}\n  => {verdict}", qualified
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="summarize", description="latency tables")
+    p = argparse.ArgumentParser(prog="summarize", description="§5.2 latency tables")
     p.add_argument("--rtt", type=Path, required=True, help="client .rtt.i64 (CO-corrected)")
     p.add_argument("--actual", type=Path, help="client .actual.i64, reported beside the honest one")
     p.add_argument("--lag", type=Path, help="client .lag.i64 (the queue proxy)")
@@ -408,7 +408,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--require-samples",
         type=int,
         default=0,
-        help="refuse the run below this many measured samples (primary sample floor: 100000)",
+        help="refuse the run below this many measured samples (§5.2 primary floor: 100000)",
     )
     p.add_argument("--md", action="store_true", help="emit markdown tables")
     p.add_argument(
@@ -509,7 +509,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     out.append(verdict_line)
 
-    # `--require-samples` IS the caller's primary-table claim (it is how the benchmark floor gets
+    # `--require-samples` IS the caller's primary-table claim (it is how the §5.2 floor gets
     # asserted), so a run that fails the gate must not exit 0 under it. Without this the verdict
     # would be one more line of prose in an output nobody diffs.
     #

@@ -4,7 +4,7 @@ Everything here exists to make an integration suite that spawns a real binary sa
 repeatedly, in parallel, and after an abort — the three ways a subprocess test becomes worse
 than no test at all.
 
-PORT: `--port 0` and read the bound port back off the engine's startup line. The design's
+PORT: `--port 0` and read the bound port back off the engine's startup line. The plan's
 bind-to-0 probe would work, but it has a window — the probe closes the socket before the
 engine opens it, so two runs starting together can pick the same port and one dies with
 EADDRINUSE. Letting the engine bind and report closes it: no probe, no window.
@@ -12,7 +12,7 @@ EADDRINUSE. Letting the engine bind and report closes it: no probe, no window.
 LIFECYCLE: `terminate()` -> bounded wait -> `kill()`, in a `finally`. An orphaned engine
 holds its port and its telemetry file, so the NEXT run fails for a reason that has nothing to
 do with the code under test — which is the failure mode that makes people stop trusting a
-suite.
+suite (audit F-08).
 """
 
 import os

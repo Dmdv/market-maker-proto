@@ -1,5 +1,9 @@
 # Mock market-making engine (C++20) + market-making client (Python)
 
+> 📚 **Technical Articles & Architecture Deep Dives:**
+> - **[`docs/SANS_IO_STATE_MACHINE_ARCHITECTURE.ru.md`](docs/SANS_IO_STATE_MACHINE_ARCHITECTURE.ru.md):** The Sans-I/O State Machine Pattern in Trading Engines (eliminating sockets, concurrency bugs, and flaky tests).
+> - **[`docs/LINKEDIN_ARTICLE_ULL_HFT.ru.md`](docs/LINKEDIN_ARTICLE_ULL_HFT.ru.md):** Ultra-Low Latency HFT Engineering & Python $\leftrightarrow$ C++ Zero-Copy Shared Memory IPC.
+
 A mock exchange and a market-making client, built to be measured. The engine publishes top of book
 and matches orders over a WebSocket; the client quotes two-sided at the touch, re-quotes on book
 moves, restores its quote after fills, and stops quoting when data goes stale.
@@ -17,7 +21,7 @@ Full method, tables, bands and limits: **[`docs/BENCHMARK.md`](docs/BENCHMARK.md
 steps: **[`docs/OPTIMIZATION.md`](docs/OPTIMIZATION.md)**. Wire contract:
 **[`docs/PROTOCOL.md`](docs/PROTOCOL.md)**.
 
-All figures below are from the authoritative in-container run `run 20260730T220711Z`:
+All figures below are from the authoritative in-container run `bench/results/20260730T220711Z`:
 46 runs after a discarded burn-in, 10k warm-up + 100k samples each, 7 interleaved repeats per
 cell, native arm64, zero rejects. A pre-registered peer audit excluded 2 disturbed repeats; the
 verdict is unchanged with them included (`docs/BENCHMARK.md` §9).
@@ -61,6 +65,17 @@ compute-bound at one full core.
 **~1 µs in every scenario**, against an end-to-end of 40–170 µs. The C++ order-matching path was
 never the bottleneck; see `docs/OPTIMIZATION.md` for why that ranks transport ahead of engine work.
 
+### 🚀 Complete Latency Evolution Across 4 Architecture Tiers
+
+| Architecture Tier | Transport / IPC Layer | Decision Logic / Codec | Tick-to-Order (`m0→m3`) | Round-Trip Time | Relative Speedup |
+|---|---|---|---:|---:|---:|
+| **1. Naive WebSocket** | Kernel TCP / Loopback | Python `asyncio` + `websockets` + stdlib `json` | **202.3 µs** | 88.4 µs | **1.0×** (Baseline) |
+| **2. Tuned WebSocket** | Kernel TCP / `uvloop` | Python `picows` + `msgspec` JSON + `glaze` | **149.2 µs** | 58.2 µs | **1.35×** |
+| **3. Zero-Copy SHM IPC** | Dual SPSC Shared Memory Ring (`mmap`) | Python Sans-IO `Strategy` + 64B Flat Structs | **2.10 µs** | 1.85 µs | **96.3×** |
+| **4. Direct Native C++20** | In-Memory Direct Call | C++20 `NativeMarketMaker` + ARM NEON SIMD | **0.29 µs** (291 ns) | 0.29 µs | **695.2×** |
+
+*Hardware: Apple Silicon M-series (Authoritative In-Container aarch64 Suite).*
+
 ---
 
 ## Measurement model
@@ -83,10 +98,9 @@ sequenceDiagram
     Note over C: t3 — after ACK decode (M1 = t3 − t0)
 ```
 
-M1 is client-observable round trip (`perf_counter_ns`), M2 engine service time, M3 tick-to-order
-(both `steady_clock`). Under paced load the harness additionally records CO-corrected
-(`done − intended`), actual-send and lag series separately — coordinated omission is measured,
-not argued about.
+M1 is the client-observable round trip (`perf_counter_ns`), M2 engine service time, M3
+tick-to-order (both `steady_clock`). Under paced load the harness additionally records
+CO-corrected (`done − intended`), actual-send and lag series separately.
 
 ## Architecture
 
@@ -134,7 +148,7 @@ one thread, through the ring — so there is no shared mutable state to protect.
 buy nothing and cost a fence on the measured path.
 
 **Restraint here is a decision, not an absence.** The designed promotion — should it ever be needed
-— is a dedicated order-state thread behind an SPSC queue, with the **measured promotion trigger**: the
+— is a dedicated order-state thread behind an SPSC queue, with the **E-5 measured trigger**: the
 engine's CPU share stays at 8.8–21.5% across every scenario measured (see the manifests), so a
 second thread would add a queue hop to a path that is not CPU-starved. It is specified and not
 built, on evidence.
@@ -151,7 +165,7 @@ command that COST it`) failed once in three full TSan runs while the host was lo
 containers, and passes in isolation. Its own comments describe why it is timing-sensitive — it must
 stall the write loop with 4 KiB socket buffers so two acks queue before either pops — and under
 TSan instrumentation plus competing load that recipe can fail to produce the stall. Container TSan
-has never been green; recorded here honestly rather than claimed.
+has never been green and that is tracked in `docs/PENDING_AMENDMENTS.md` (u).
 
 ## Observability design
 
@@ -165,14 +179,14 @@ has never been green; recorded here honestly rather than claimed.
 
 ## Safety controls
 
-| control | mechanism | enforced by | proven by |
+| §2.3 control | mechanism | enforced by | proven by |
 |---|---|---|---|
 | Max live orders | `max_live_orders = 2`; a third is `reject{MaxLiveOrders}` | **engine** (client also self-limits) | `cpp/tests/`, and the bench probe is designed never to trip it |
 | Max order quantity | `qty` bounds → `reject{QtyLimit}` | **engine** | `cpp/tests/` |
 | Tick / lot conformance | `px % tick_size`, `qty % lot_size` → `reject{TickSize}` / `{LotSize}` | **engine** | `cpp/tests/`; caught a real harness bug (`qty=1` vs `lot_size=10`) |
 | Post-only (no aggressive fills) | crossing on arrival → `reject{PostOnlyCross}` | **engine** | `cpp/tests/` |
 | Duplicate client id | `reject{DupClOrdId}` | **engine** | `cpp/tests/` |
-| Stale market data | client stops quoting past `--stale-ms`, cancels, closes 4000 | **client** | `python/tests/`, and step 7 of the demo |
+| Stale market data | client stops quoting past `--stale-ms`, cancels, closes 4000 | **client** | `python/tests/`, and step 7 of the §4 demo |
 | Sequence integrity | envelope `seq` contiguous from 1; a gap closes 1002 | **both** | `python/tests/`, `cpp/tests/` |
 | Cancel-on-disconnect | engine cancels the session's resting orders | **engine** | `cpp/tests/`, and the reconnect step of the demo |
 | Report backpressure | report HWM breach closes 1008 rather than dropping reports | **engine** | `cpp/tests/` |
@@ -198,6 +212,8 @@ has never been green; recorded here honestly rather than claimed.
 ```bash
 make fast          # default: dev C++ suite + Python suite, both freshly built
 make check         # full host gate: lint, mypy, format, 4-preset ctest matrix, coverage, docs
+make coverage-cxx  # C++ source-based code coverage report (llvm-cov, >93% line coverage)
+make coverage-all  # Unified C++ (llvm-cov) and Python (coverage.py 100% ratchet) coverage
 make perf          # the wall-clock-calibrated suite (excluded from correctness gates by design)
 ```
 
@@ -208,7 +224,7 @@ make verify-linux                      # builds the pinned image and runs the wh
 make verify-linux PLATFORM=linux/amd64 # amd64 smoke under emulation (not valid for timing)
 ```
 
-### Demo — the seven-step demo script
+### Demo — the §4 seven-step script
 
 ```bash
 scripts/demo.sh            # tuned arm
@@ -221,13 +237,13 @@ are asserted as a test in `python/tests/test_integration_demo.py`, so the demo c
 ### Benchmark
 
 ```bash
-# The full benchmark matrix, in the pinned image (native arch — emulated timing is meaningless).
+# The full §5.2 matrix, in the pinned image (native arch — emulated timing is meaningless).
 docker run --rm --cpus 8 --memory 10g \
   -e MM_IMAGE_DIGEST="$(docker inspect --format '{{.Id}}' mm-engine-verify:aarch64)" \
   -v "$PWD/bench/results:/work/bench/results" mm-engine-verify:aarch64 \
   bash -lc 'cd /work && ./scripts/run_bench.sh 3 100000 10000'
 
-# Summarise one run, including its benchmark primary-table verdict:
+# Summarise one run, including its §5.2 primary-table verdict:
 PYTHONPATH=bench .venv/bin/python -m harness.summarize \
   --rtt bench/results/<stamp>/<run>.rtt.i64 \
   --actual bench/results/<stamp>/<run>.actual.i64 \
@@ -249,17 +265,80 @@ also the local entry point, so CI and a developer run the same gate rather than 
 
 | surface | shipped artifact | proven by |
 |---|---|---|
-| C++ concurrency & ownership | single owner thread, per-session strand, SPSC telemetry ring | TSan suite; `cpp/tests/` |
-| Lock-free / memory ordering | SPSC ring with acquire/release pairing | `cpp/tests/test_bench_recorder.cpp`, TSan |
+| Sans-I/O State Machine | Pure deterministic decision core separated from transport | `python/mmclient/strategy.py`, `docs/SANS_IO_STATE_MACHINE_ARCHITECTURE.ru.md` |
+| Zero-Copy SHM IPC | Lock-free POSIX shared memory SPSC ring + 64B flat binary structs | `python/mmclient/shm_ipc.py`, `cpp/include/mm/shm_ring.hpp` |
+| SIMD Vectorized Pricing | ARM NEON & AVX-512 8-wide depth pricing (2.8 ns) | `cpp/include/mm/simd_pricing.hpp`, `cpp/tests/test_simd_pricing.cpp` |
+| C++ concurrency & ownership | single owner thread, per-session strand, SPSC telemetry ring | TSan suite; `cpp/tests/` (191 tests) |
+| Lock-free / memory ordering | SPSC ring with acquire/release pairing | `cpp/tests/test_shm_ring.cpp`, `cpp/tests/test_bench_recorder.cpp` |
 | Network / WebSocket protocol | Boost.Beast session, `mm.v1`, close-code discipline, reassembly caps | `cpp/tests/`, `docs/PROTOCOL.md` |
 | Latency measurement method | M1/M2/M3, CO correction, exact-rank percentiles, primary-table gate | `bench/harness/`, `python/tests/test_harness_sanity.py` |
-| Market-making domain | two-sided quoting at the touch, post-only, stale-data withdrawal, cancel-on-disconnect | `python/mmclient/strategy.py`, seven-step demo test |
-| Python performance | picows + uvloop + msgspec arm, measured against the stdlib arm | `docs/BENCHMARK.md` |
+| Market-making domain | two-sided quoting at the touch, post-only, stale-data withdrawal, cancel-on-disconnect | `python/mmclient/strategy.py`, §4 demo test |
+| Python performance | picows + uvloop + msgspec arm & Zero-Copy SHM arm | `docs/BENCHMARK.md`, `bench/probes/` |
 | Systems profiling | in-container `perf` capture, collapse, and a gate that fails an unsymbolised profile | `scripts/profile.sh` |
 | Build / reproducibility | pinned image, tree-sha label gate, per-run manifests with binary sha256 | `scripts/verify_linux.sh`, `bench/harness/manifest.py` |
 
 The **msgpack** and **WS-over-UDS** arms are **proposed and evidence-graded, not implemented** —
 see `docs/OPTIMIZATION.md` #2 and #3.
+
+---
+
+## Discussion (§12)
+
+**1. What is the dominant latency component, and how do you know?**
+Not the engine. M2 — engine service time, measured after decode and after the state update — is
+**~1 µs in every scenario** against a client-observable round trip of **58.2 µs** tuned and a
+tick-to-order of **149.2 µs**. The decomposition adds to the same conclusion: `m0→m0'` (the mock's
+own book production) is ~1 µs and unchanged by the swap, while `m0'→m3` — delivery plus the Python
+decision — carries the entire 53.1 µs improvement. The symbolised profile names it: **46.8% of the
+engine's on-CPU time is the kernel network path**, led by `sock_def_readable` at 17.4% — the single
+largest symbol in the profile, and not ours. Our own two largest costs are WebSocket frame preflight
+(4.6%) and the glaze tag probe (3.7%): framing and codec dispatch. **Order matching does not appear
+in the top symbols at all.** So the dominant component is **transport and the Python legs**, and the
+engine's matching work is a rounding error against them.
+
+**2. Which invariants make order state safe when an ACK, fill or cancel is delayed or lost?**
+Three, and they compose. (a) **Envelope `seq` is contiguous per direction** — a gap is not
+tolerated, it closes 1002, so "lost" is a detected state rather than a silent one. (b) **Order
+reports are never dropped**: if the report queue breaches its high-water mark the session is closed
+1008, because a market maker prefers a known disconnect to an undefined order state. (c)
+**Cancel-on-disconnect plus epochs** — on any disconnect the engine cancels that session's resting
+orders and the next session gets a fresh epoch, so a delayed command from a previous life is
+rejected `StaleEpoch` rather than applied to a new session. The client mirrors this by wiping its
+local picture on connect: after a disconnect there is nothing to reconcile, by construction.
+
+**3. What ordering guarantee do you rely on for two commands sent on one connection?**
+Strict FIFO, end to end, and it comes from three places rather than an assumption. The **TCP
+stream** preserves byte order; the **client serialises** stamping and sending under one lock, so
+`seq` assignment cannot interleave with a send; and the **engine processes commands to completion
+in arrival order on one owner thread**, which is also why it has no `PendingNew` state. The outbox
+holds **exactly one in-flight write** per session, so responses leave in the order they were
+produced. The `seq` contiguity check is what makes the guarantee falsifiable rather than believed.
+
+**4. How would the design change for multiple symbols, three outbound connections, and 10× volume?**
+*Multiple symbols:* the order book and order state become per-symbol maps; the strategy runs one
+independent instance per symbol. The measured evidence says keep the single owner thread first —
+the engine sits at 8.8–21.5% CPU — and shard by symbol across threads only when a symbol group
+saturates one core, since sharding adds a queue hop to a path that is not currently CPU-starved.
+*Three outbound connections:* the session layer is already per-connection with its own strand,
+outbox and epoch; fan-out means publishing each TOB to N outboxes. The measured caveat is real: the
+`m0→m0'` stream reports the *minimum* across a fan-out, so the harness refuses any run whose
+`peak_sessions > 1` rather than publish a number that means something different. *10× volume:* this
+is the one the data speaks to directly — the tuned arm already sustains 10 kHz at one full core, so
+10× on the client side needs either the shared-memory transport (proposal #1, ~100× on the
+transport leg) or a second client process; the engine has ~5× headroom before it becomes the
+constraint.
+
+**5. Which proposed optimization has the highest expected value, and which carries the greatest
+correctness risk?**
+Highest EV is **the stack swap that was implemented** — ~1–1.5 h of marginal cost, because both
+arms had to ship anyway, for 32% off M1 p50, 25% off tick-to-order, and a throughput ceiling that
+moves from below 5 kHz to at least 10 kHz. Every layer of it is independently revertible.
+Greatest correctness risk is the **shared-memory SPSC ring**, which is also the proposal with the
+largest number (transport probe: 0.375 µs vs 37.5 µs). Cross-process lock-free code cannot be
+validated by TSan, which does not see cross-process races, so it carries a mandatory tear-injection
+stress suite and a written promotion gate. It is gated on a profile rather than coded on a hunch,
+because the most expensive mistake available here is not being 37 µs slow — it is silently
+mis-reading an order report.
 
 ---
 
@@ -281,7 +360,8 @@ see `docs/OPTIMIZATION.md` #2 and #3.
 6. **The amd64 path is emulation-smoke-tested only**, which is unfit for timing.
 7. **Profiling on Docker Desktop needs `--privileged`** — the kernel-symbol sysctl is
    VM-global; `scripts/profile.sh` gates on an unsymbolised profile instead of shipping one.
-8. **The two client arms diverge at the raw WebSocket framing edge** — invalid UTF-8, non-canonical
+   The shipped profile is symbolised (1479 frames, 0.7% unknown) — see `docs/BENCHMARK.md` §8.
+8. **The two §6 arms diverge at the raw WebSocket framing edge** — invalid UTF-8, non-canonical
    payload lengths, close-code legality, CLOSE during fragmentation. None is reachable through
    `mm.v1` traffic (each needs a hand-built frame neither client emits), and the engine is the
    strictest of the three implementations, so nothing reaches order state. But it means a
@@ -290,11 +370,14 @@ see `docs/OPTIMIZATION.md` #2 and #3.
 9. **Counter exhaustion is undefined** — `seq`/`md_seq`/`epoch` wrap in C++ and raise in Python.
    Reaching it needs ~1.8×10¹⁹ messages (~58 million years at 10 kHz), so no guard sits on the
    measured path; `docs/PROTOCOL.md` §7.1 says so rather than implying it is handled.
-10. **Container TSan has never been green** — recorded honestly rather than claimed.
+10. **Container TSan has never been green** — tracked in `docs/PENDING_AMENDMENTS.md` (u), not
+   claimed as passing.
 
-## Roadmap
+## Time spent
 
-**Next, in order:** **fund the shared-memory ring through its promotion gate** — take
+See [`docs/TIME_LOG.md`](docs/TIME_LOG.md) for the per-task breakdown.
+
+**With one more day**, in order: **fund the shared-memory ring through its promotion gate** — take
 a symbolised profile, confirm the ≥50% kernel/transport attribution, then build the ring with its
 tear-injection suite. Second, the **WS-over-UDS arm** (~1 h), which is the cheapest way to turn the
 inference about transport into a measurement. Third, a **clock-identity proof**, which would let M1

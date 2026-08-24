@@ -1,12 +1,12 @@
-// tests, fill-rule part (lifecycle/state-machine cases live in test_engine.cpp,
+// Task 3 tests, fill-rule part (lifecycle/state-machine cases live in test_engine.cpp,
 // session-lifetime cases in test_engine_session.cpp, the allocation inventory in
 // test_engine_alloc.cpp; shared helpers in engine_test_support.hpp — split under the
-// 500-line file cap): the fill rule (full/partial/exec_id, own-limit price,
+// 500-line file cap): the §3.3 fill rule (full/partial/exec_id, own-limit price,
 // un-rounded quantities), absorbing terminals in the sweep (both sides),
 // cancel-of-a-partial, the md_seq idempotency guard + stale_books_ignored counter
-// (including a first book carrying md_seq 0), locked/crossed books , // exogeneity, and the
-// history-scaling regression for the live-order indexes (perf-tagged: hidden from the default
-// suite, registered as its own ctest test — see CMakeLists.txt).
+// (including a first book carrying md_seq 0), locked/crossed books (A3 F-28), F-30
+// exogeneity, and the history-scaling regression for the live-order indexes (perf-tagged:
+// hidden from the default suite, registered as its own ctest test — see CMakeLists.txt).
 #include "engine_test_support.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -154,10 +154,10 @@ TEST_CASE("engine: fill rule — full, partial, exec_id monotonic", "[engine]") 
   }
 }
 
-TEST_CASE("engine: the book is EXOGENOUS — fills never consume displayed qty", "[engine]") {
+TEST_CASE("engine: the book is EXOGENOUS (F-30) — fills never consume displayed qty", "[engine]") {
   // Two resting bids of 50 against a displayed ask top of 50: BOTH fill their full
   // min(leaves, top) = 50, so total filled (100) EXCEEDS the displayed 50. Intentional,
-  // not a bug: the TOB feed is an exogenous signal the engine never depletes —
+  // not a bug: the TOB feed is an exogenous signal the engine never depletes (F-30) —
   // each resting order is evaluated against the full displayed top independently.
   // The bids are accepted in REVERSE lexicographic order ("b2" before "b1") so the
   // per-fill assertions below pin (session, cl_id) KEY order, not insertion order, and
@@ -228,7 +228,7 @@ TEST_CASE("engine: md_seq guard — repeated or rewound books are ignored", "[en
   // The fill sweep runs exactly once per TOB update; a redelivered or rewound md_seq
   // neither fills nor installs the stale book — and each drop is COUNTED
   // (stale_books_ignored), never silent: the feed is monotonic by construction, so
-  // any nonzero count in production is a producer regression must surface.
+  // any nonzero count in production is a producer regression Task 7 must surface.
   auto eng = primed_engine();
   require_only<mm::OrderAck>(eng.on_new(kSessA, mk_new("c1", "B", 500000, 100)));
 
@@ -278,7 +278,7 @@ TEST_CASE("engine: a FIRST book carrying md_seq 0 is installed and sweeps", "[en
   // The pre-first-book state is tracked explicitly (book_seen_), not by an md_seq==0
   // sentinel — a real first update with md_seq 0 must not be silently dropped, or its
   // fills vanish and the post-only entry check stays blind. md_seq is assigned by the
-  // feed / server; the engine does not assume it starts at 1.
+  // Task 5 feed / Task 7 server; the engine does not assume it starts at 1.
   mm::OrderEngine eng{spec_instrument()};
   require_only<mm::OrderAck>(eng.on_new(kSessA, mk_new("c1", "B", 500000, 50)));
 
@@ -298,7 +298,7 @@ TEST_CASE("engine: a FIRST book carrying md_seq 0 is installed and sweeps", "[en
                  "c3");
 }
 
-TEST_CASE("engine: locked and crossed books", "[engine]") {
+TEST_CASE("engine: locked and crossed books (F-28)", "[engine]") {
   mm::OrderEngine eng{spec_instrument()};
 
   SECTION("locked book: entry at the lock price crosses; a resting order at it fills") {
@@ -332,7 +332,7 @@ TEST_CASE("engine: locked and crossed books", "[engine]") {
 // scheduler preemption on a loaded CI host must never red a CORRECTNESS gate (a red
 // that trains reviewers to wave "flakes" through). It is NOT unenforced: CMakeLists.txt
 // registers it as its own ctest test (label `perf`, run via `ctest --preset perf`),
-// and running that preset is queued as a known limitation.
+// and the Task 12/13 obligation to run that preset is queued in PENDING_AMENDMENTS.
 //
 // Deliberately NOT tagged `[engine]`, the tag every correctness engine case carries:
 // `[.]` only suppresses the UNFILTERED run, so a targeted `./mm_tests "[engine]"` in a
@@ -365,7 +365,7 @@ TEST_CASE("engine: hot-path cost does not scale with retained history", "[.][per
     // Calibration: the pre-index linear walk cost ~240 us per cycle at 20k history ->
     // ~480 ms over kCycles, far over this bound; the indexed engine measures ~0.67 ms at
     // history 0 and ~0.83 ms at 20k (min-of-kReps, dev host macOS arm64, rel -O3 -DNDEBUG
-    // — the perf preset's flavor; a recorded baseline of 0.685/0.826 for the same
+    // — the perf preset's flavor; TIME_LOG.md row 3 records 0.685/0.826 for the same
     // change). Re-measure and update these two figures whenever the command path moves.
     // This bound is deliberately NOT sensitive to the residual O(log n) tree descent
     // on the on_new/on_cancel map lookups (a documented, accepted cost — engine.hpp
@@ -417,7 +417,7 @@ TEST_CASE("engine: hot-path cost does not scale with retained history", "[.][per
     // iterators, so the no-fill sweep must cost the same at 0 and 20k retained
     // entries (measured over kSweeps: ~0.80 ms vs ~0.80 ms — ratio ~1.0; min-of-kReps,
     // dev host macOS arm64, rel -O3 -DNDEBUG, the perf preset's flavor, agreeing with the
-    // 0.799/0.795 the recorded baseline shows for the same change. Only the RATIO is a
+    // 0.799/0.795 TIME_LOG.md row 3 records for the same change. Only the RATIO is a
     // contract: the MAGNITUDES track host load, and repeat batches on this same tree have
     // read as high as ~0.94 ms with the ratio still ~1.0 — which is why the bound below is
     // multiplicative and why an absolute figure here is calibration, never an assertion); a

@@ -1,5 +1,5 @@
-// Telemetry tests: the wire-shape edges of the telemetry stream — the fourth TU of the
-// telemetry suite.
+// Task 6.5 tests: the wire-shape edges of the telemetry stream — the fourth TU of the
+// telemetry suite, split out at gate P4-i1 under the 500-line file cap (seam map in
 // telemetry_test_support.hpp: the ring is cased in test_telemetry.cpp, the writer's
 // happy-path JSON contract in test_telemetry_writer.cpp, its failure paths in
 // test_telemetry_errors.cpp; every TU shares the `telemetry:` name prefix and

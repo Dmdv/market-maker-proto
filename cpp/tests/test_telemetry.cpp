@@ -1,4 +1,4 @@
-// Telemetry tests: the SPSC telemetry ring — the ring part of the telemetry
+// Task 6.5 tests: the SPSC telemetry ring (record A1) — the ring part of the telemetry
 // suite (seam map in telemetry_test_support.hpp: the writer thread, the counters
 // snapshot and the JSON emission are cased in test_telemetry_writer.cpp, the writer's
 // failure paths in test_telemetry_errors.cpp, the run markers / fallback shapes / drain
@@ -17,7 +17,7 @@
 // and — the reason the type exists — a producer thread and a consumer thread exchange
 // a million records with no loss, no reorder and no torn lane.
 //
-// That last case is deliberately the TSan payload: its
+// That last case is deliberately the Task 12 TSan payload (plan Task 6.5 Step 1): its
 // assertions prove ORDER and VALUES, while the happens-before edges the header's
 // memory-ordering contract claims are what TSan verifies over the same case — a release
 // store downgraded to relaxed is a DATA RACE even when the values happen to survive on
@@ -25,9 +25,10 @@
 // (bench/probes/tsan_struct_copy_probe.cpp): the slot transfers are struct copies, and
 // the dev host's Apple TSan runtime does not race-check memcpy-shaped accesses, so the
 // HOST `ctest --preset tsan` enforces the ring's INDEX protocol only. Under the
-// authoritative container toolchain (g++/libtsan — where the sanitizer gate's sanitizer matrix
+// authoritative container toolchain (g++/libtsan — where Task 12's sanitizer matrix
 // runs) every downgrade mutant of the contract's edges is reported as a data race on
-// this very case and the shipped ordering is clean (stress battery).
+// this very case and the shipped ordering is clean (Task 6.5 battery, docs/TIME_LOG.md
+// row 6.5).
 #include <catch2/catch_test_macros.hpp>
 
 #include "alloc_probe_support.hpp"
@@ -201,7 +202,7 @@ TEST_CASE("telemetry: capacity rounds up to a power of two and zero is rejected"
   CHECK(mm::SpscTelemetryRing{5}.capacity() == 8);
   CHECK(mm::SpscTelemetryRing{8}.capacity() == 8);
   CHECK(mm::SpscTelemetryRing{1023}.capacity() == 1024);
-  CHECK(mm::SpscTelemetryRing{}.capacity() == 4096); // the design's default
+  CHECK(mm::SpscTelemetryRing{}.capacity() == 4096); // the plan's default
   CHECK(mm::SpscTelemetryRing{}.capacity() == mm::SpscTelemetryRing::kDefaultCapacity);
   REQUIRE_THROWS_AS(mm::SpscTelemetryRing{0}, std::invalid_argument);
   // The other rounding edge: a request past bit_ceil's representable range must throw the
@@ -253,12 +254,12 @@ TEST_CASE("telemetry: the steady state allocates nothing after construction", "[
 }
 
 TEST_CASE("telemetry: a million records cross the threads in order, none torn", "[telemetry]") {
-  // The TSan payload . The producer RETRIES refused pushes —
+  // The Task 12 TSan payload (plan Task 6.5 Step 1). The producer RETRIES refused pushes —
   // the ring itself never blocks; the retry loop is this test's, standing in for records
   // the engine would instead let drop — so every record must arrive, in order, with every
   // lane intact. dropped() is left unasserted here BY CONTRACT: it counts REFUSALS (each
-  // full-ring attempt increments it, the telemetry subsystem), so under retries it tallies
-  // momentary fullness, not lost records — loss-freedom is exactly `received == kRecords` in order.
+  // full-ring attempt increments it, plan Task 6.5), so under retries it tallies momentary
+  // fullness, not lost records — loss-freedom is exactly `received == kRecords` in order.
   constexpr std::uint64_t kRecords = 1'000'000;
   mm::SpscTelemetryRing ring{1024};
   const std::size_t cap_before = ring.capacity();

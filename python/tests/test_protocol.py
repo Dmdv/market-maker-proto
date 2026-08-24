@@ -1,13 +1,13 @@
 """Envelope, field typing, forward compatibility and error PRECEDENCE, through both arms.
 
 Contract source: ``cpp/include/mm/codec.hpp``. The C++ engine's two arms were forced into
-byte-identical acceptance during the gate; the two PYTHON arms get the same
-treatment here, because the naive->product swap is the measured hot-path optimization and an
+byte-identical acceptance during the Task 2 gate; the two PYTHON arms get the same
+treatment here, because the naive->product swap is the measured §6 optimization and an
 optimization that also changes what the client accepts is not a like-for-like comparison.
 
-the Python codec's message-level battery is three chapters, one file each, because a single
-1038-line module is against the repo's own files-under-500-lines convention (the same
-convention that split C++ files mid-review):
+Task 4's message-level battery is three chapters, one file each, because a single 1038-line
+module is against the repo's own files-under-500-lines convention (the same convention that
+split a C++ file mid-gate in Tasks 2 and 3):
 
   * this file — which MESSAGE the frame is, and in what order its verdicts are given;
   * ``test_decode_fields.py`` — what each member may hold on the way IN;

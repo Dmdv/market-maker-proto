@@ -2,7 +2,7 @@
 # Build the authoritative ubuntu:26.04 image and run the full test suite — plus the
 # Python lint/type gate — inside it.
 # Bare invocation targets the HOST-NATIVE platform (reviewer/CI path; on GitHub's x86-64
-# runners this is real target-arch evidence for the acceptance criterion 1 — never qemu).
+# runners this is real target-arch evidence for docx §9 acceptance criterion 1 — never qemu).
 # On the macOS arm64 dev host, `--platform linux/arm64` is the authoritative-benchmark
 # invocation (identical to bare there: the native Linux platform IS linux/arm64).
 # `--platform linux/amd64` on an arm64 host is the E-8 qemu smoke (build + unit tests +
@@ -38,9 +38,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Only pass --platform when explicitly requested: a hardcoded linux/arm64
+# Only pass --platform when explicitly requested (gate finding): a hardcoded linux/arm64
 # default would silently qemu-emulate the build on every x86-64 reviewer/CI host,
-# defeating the E-8 and mitigations that protect acceptance criterion 1.
+# defeating the E-8 and F-33 mitigations that protect acceptance criterion 1.
 PLATFORM_ARGS=()
 if [[ -n $PLATFORM ]]; then
   PLATFORM_ARGS=(--platform "$PLATFORM")
@@ -158,8 +158,8 @@ docker run --rm ${PLATFORM_ARGS[@]+"${PLATFORM_ARGS[@]}"} \
   # environment away from what docker/Dockerfile line 1 asserts (g++ 15.2, boost 1.90,
   # python 3.14). The asserted CONTRACT is the minor series (g++ 15.x, Python 3.14.x, Boost 1_90),
   # not an exact patch: ubuntu:26.04 ships patch updates under the same tag and pinning the
-  # patch would fail on an ordinary archive refresh. The harness publishes a benchmark manifest
-  # against these.
+  # patch would fail on an ordinary archive refresh. Task 11/13 publish a benchmark manifest
+  # against these (P1-R3 finding; series-vs-patch contract stated per codex hard-gate S3).
   # pip is recorded (unpinned-by-design: the venv bundled pip), not asserted.
   echo "--- toolchain versions (asserted: g++ 15.*, BOOST_LIB_VERSION 1_90, Python 3.14.*)"
   GXX_VER=$(g++ --version | head -1)
@@ -171,7 +171,8 @@ docker run --rm ${PLATFORM_ARGS[@]+"${PLATFORM_ARGS[@]}"} \
   case "$PY_VER" in "Python 3.14."*) ;; *) echo "FATAL toolchain drift: want Python 3.14.*, got: $PY_VER" >&2; exit 1 ;; esac
   case "$BOOST_VER" in *\"1_90\"*) ;; *) echo "FATAL toolchain drift: want BOOST_LIB_VERSION \"1_90\", got: $BOOST_VER" >&2; exit 1 ;; esac
 
-  # Toolchain probes in the pinned image.
+  # Toolchain probes in the pinned image (F-25/F-35: the design-time probes ran on Debian
+  # trixie; these re-prove the three risky assumptions inside ubuntu:26.04 itself).
   echo "--- probe: glaze TU compiles under -std=c++23"
   printf "%s\n" \
     "#include <glaze/glaze.hpp>" \

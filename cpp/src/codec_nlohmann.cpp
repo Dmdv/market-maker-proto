@@ -1,5 +1,23 @@
-// Naive codec arm: nlohmann DOM extraction per KNOWN field over the preflight's spans — the
-// baseline the tuned arm must match byte-for-byte. Hosts make_codec(), so glaze stays in one TU.
+// Naive codec arm: nlohmann DOM extraction of known fields (plan Task 2 — "naive but
+// correct"). This is the measured baseline; the tuned glaze arm must agree on every
+// decode/encode behavior (tests pin both against the same golden fixtures).
+//
+// encode() is a direct declaration-order serializer, NOT DOM build + dump() (codex R1):
+// the ICodec contract — caller buffer, no steady-state allocation, canonical wire-key
+// order — is normative for BOTH arms, and the dump() path can satisfy none of it (fresh
+// DOM nodes + a freshly allocated result string + alphabetically sorted keys).
+//
+// decode() extracts each KNOWN field by DOM-parsing that field's raw span from the
+// shared preflight's FrameScan. Unknown values are never handed to nlohmann at all
+// (grok R1, S2): nlohmann MATERIALIZES numbers into doubles, so a whole-frame parse
+// rejected out-of-range tokens (1e309, 400-digit integers) in fields the contract says
+// are IGNORED — while the tuned arm's validator disagreed in the opposite direction.
+// The shared preflight (frame_preflight.cpp) is the single grammar authority and is
+// COMMON-MODE across both arms, so the A/B delta measures per-field nlohmann DOM
+// extraction vs glaze typed read — not whole-library parse vs parse (codec.hpp).
+//
+// Also hosts make_codec() — the dispatch lives on the C++20 side so only the single
+// C++23 TU, codec_glaze.cpp, ever sees glaze.
 #include "mm/codec.hpp"
 
 #include <nlohmann/json.hpp>
@@ -18,8 +36,12 @@ namespace {
 
 using nlohmann::json;
 
-// DOM-parses ONE known field's span. An absent key and a value nlohmann cannot represent both
-// yield nullopt. UNKNOWN fields are never parsed: their content must never gate acceptance.
+// DOM-parses ONE known field's span (codec.hpp: FrameScan). Absent key and value that
+// nlohmann cannot represent (e.g. an integer token past the double range) both yield
+// nullopt — the caller treats either as missing-or-mistyped. UNKNOWN fields are never
+// parsed at all: the shared preflight validated their grammar, and their content —
+// notably a number's magnitude, which nlohmann materializes into a double — must never
+// gate acceptance (grok R1, S2).
 std::optional<json> parse_field(const detail::FrameScan &scan, const char *key) {
   const auto span = scan.find(key);
   if (span.empty())
@@ -30,8 +52,13 @@ std::optional<json> parse_field(const detail::FrameScan &scan, const char *key) 
   return j;
 }
 
-// Typed extractors: false (-> Malformed) when a required key is missing or mistyped. Integers
-// run the SHARED token predicate on the raw span first; nlohmann then owns only RANGE verdicts.
+// Typed extractors: return false (-> Malformed) when the key is missing or mistyped.
+// All fields are required — see the decode contract in codec.hpp.
+//
+// The integer extractors run the SHARED token predicate on the raw span FIRST (gate
+// P4-i1): "integral token" is expressed once, in mm::detail, for both arms — nlohmann
+// below only CONVERTS already-accepted tokens, and still owns the naive arm's range
+// verdicts (u64 overflow materializes as a double; the explicit int64 guard below).
 bool get_u64(const detail::FrameScan &scan, const char *key, std::uint64_t &out) {
   if (!detail::is_unsigned_integer_token(scan.find(key)))
     return false;
@@ -78,8 +105,11 @@ DecodeError malformed(std::string detail) {
   return DecodeError{RejectCode::Malformed, std::move(detail)};
 }
 
-// ---- canonical encode helpers: a declaration-order serializer, not DOM build + dump() (which
-// satisfies none of the ICodec contract). Escape form mirrors glaze's writer BYTE-FOR-BYTE.
+// ---- canonical encode helpers -------------------------------------------------------
+// Escape form mirrors the tuned arm's glaze writer BYTE-FOR-BYTE (tests pin the
+// equality): \b \t \n \f \r \" \\ shorthand; remaining control bytes as uppercase
+// \u00XX; everything >= 0x20 passes through raw (outbound strings are valid UTF-8 by
+// construction: decoded from preflight-validated input, or engine constants).
 void append_escaped(std::string &out, std::string_view s) {
   for (const char ch : s) {
     const auto c = static_cast<unsigned char>(ch);
@@ -223,14 +253,17 @@ void encode_msg(std::string &out, const Fill &m) {
 class NlohmannCodec final : public ICodec {
 public:
   std::variant<InMsg, DecodeError> decode(std::string_view input) override {
-    // Shared preflight FIRST: the single grammar authority, so verdicts are identical across
-    // arms by construction; its iterative depth cap also bounds the per-field parses below.
+    // Shared preflight FIRST (codec.hpp): the single grammar authority, so verdicts are
+    // identical across arms by construction; its iterative depth cap also bounds the
+    // per-field nlohmann parses below (every span inherits the frame's depth budget).
     detail::FrameScan scan;
     if (auto err = detail::frame_preflight(input, scan))
       return std::move(*err);
 
-    // Envelope discipline, in contract order: t (known) -> v (== 1) -> the tagged struct's full
-    // field set, extracted per KNOWN field so unknown values never reach nlohmann.
+    // Envelope discipline, in contract order: t (present -> known), then v (present ->
+    // unsigned -> == 1), then the full field set of the tagged struct. Extraction is
+    // per-KNOWN-field DOM parses over the preflight's spans — unknown values never
+    // touch nlohmann, so their content cannot gate acceptance (grok R1, S2).
     const auto t = parse_field(scan, "t");
     if (!t || !t->is_string())
       return malformed("t missing or not a string");
@@ -272,8 +305,10 @@ public:
   }
 
   void encode(const OutMsg &msg, std::string &out) override {
-    // Canonical wire form straight into the caller's buffer: clear() keeps capacity and the
-    // appends reuse it — allocation-free once warmed. This serializer has no failure mode.
+    // Canonical wire form straight into the caller's buffer: clear() keeps capacity and
+    // the appends reuse it — steady-state allocation-free once warmed (contract in
+    // codec.hpp; tests pin capacity AND data-address stability across encodes). This
+    // direct serializer has no failure mode, matching the shared encode contract.
     out.clear();
     std::visit([&out](const auto &m) { encode_msg(out, m); }, msg);
   }

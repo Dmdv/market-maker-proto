@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Post-hoc peer audit for a finished benchmark matrix directory.
+"""Post-hoc peer audit for a finished §5.2 matrix directory.
 
 Pre-flight cannot see Docker Desktop VM stalls that arrive mid-matrix (idle_tuned_R1
 with wall 11.0 s vs siblings 9.4 s; paced_naive_R2 with 108 samples >5 ms vs 16–30
@@ -7,7 +7,7 @@ while wall was identical). This script reads manifests + `.rtt.i64` and refuses 
 matrix when any primary (R*) peer is disturbed relative to its siblings.
 
 Rules (measured on bench/results/20260730T051524Z + synthetic peer checks; see
-the host-contamination study):
+GROK_INVESTIGATION.md):
 
   WALL:  wall_s > median(peer walls) * (1 + WALL_FRAC)
          WALL_FRAC=0.10. Clean idle wall CV ~0.7%; contaminated idle was +17%.

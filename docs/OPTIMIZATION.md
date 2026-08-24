@@ -1,6 +1,6 @@
 # OPTIMIZATION — the implemented change, measured, and what to do next
 
-Every number here comes from benchmark run `20260730T220711Z` and is reproduced in
+Every number here comes from the §5.2 matrix in `bench/results/20260730T220711Z` and is reproduced in
 `docs/BENCHMARK.md` with its full tables, bands and methodology. Nothing in this document is an
 estimate unless it is labelled one.
 
@@ -11,7 +11,7 @@ estimate unless it is labelled one.
 The **naive arm**: `websockets` + `asyncio` + stdlib `json` on the client, `nlohmann` on the
 engine. It is not a strawman — it is a correct, complete implementation of the same protocol
 running the same strategy core, the same envelope stamping, the same sequencing and the same
-safety controls. The only things that differ from the tuned arm are the four stack
+§2.3 safety controls. The only things that differ from the tuned arm are the four stack
 components in §2.
 
 Measured (medians of 7 audit-clean interleaved repeats, CO-corrected, 10k warm-up + 100k samples

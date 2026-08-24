@@ -1,10 +1,10 @@
 # modernize-use-trailing-return-type is excluded: every plan-normative interface uses leading
 # return types (e.g. `std::string_view to_string(RejectCode)`), so the check can never be
-# satisfied without rewriting mandated signatures (review finding).
+# satisfied without rewriting mandated signatures (P1-R2 gate finding).
 # bugprone-easily-swappable-parameters is excluded for the same reason: plan-normative
 # signatures (e.g. `validate_order(..., string_view symbol, string_view side, int64 px,
 # int64 qty)`) mandate adjacent same-typed parameters, so the check could only ever be
-# NOLINT-ed, never fixed (review finding).
+# NOLINT-ed, never fixed (P1-R3 gate finding).
 Checks: 'bugprone-*,-bugprone-easily-swappable-parameters,performance-*,concurrency-*,modernize-use-*,-modernize-use-trailing-return-type,cppcoreguidelines-init-variables'
 WarningsAsErrors: 'bugprone-use-after-move,concurrency-*'
 HeaderFilterRegex: 'cpp/include/mm/.*'

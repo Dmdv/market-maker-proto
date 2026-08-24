@@ -1,4 +1,4 @@
-// tests, allocation part: mm::Outbox's rules on the allocation paths — four counted
+// Task 6 tests, allocation part: mm::Outbox's rules on the allocation paths — four counted
 // regions, an injection walk, and the one guard only this probe can arm, across four cases.
 // The tick case counts the steady push-then-pop cycle and the never-popped supersession
 // burst (both exactly zero, at symbols past both small-string capacities and, in the burst,
@@ -7,9 +7,9 @@
 // two-sided by the push count; the enqueue-failure case bounds the push churn the same way,
 // then fails every allocation of the push sequence in turn and drains the landed prefix —
 // content and order, as whole report values — after each failure; and the
-// valueless-guard case builds the one report fixture that EXISTS only by
+// valueless-guard case (hard gate) builds the one report fixture that EXISTS only by
 // failing an allocation mid-emplace, then arms it on a BREACHED latch. Split out of the
-// engine's allocation TU — sharing one file had pushed it past the repo's
+// engine's allocation TU at gate P1-R5 — sharing one file had pushed it past the repo's
 // 500-line cap, and the one-TU constraint that put the Outbox case there is about the
 // global `operator new` REPLACEMENT (defined once, in alloc_probe.cpp), not about the cases
 // that arm it. All four cases keep the `outbox:` name prefix and the `[outbox]` tag, so
@@ -85,7 +85,7 @@ constexpr std::size_t kPushes = 64;
 // svc_ns is fixed but non-zero for the same reason; status keeps the SSO-sized "live" and
 // cl_id its 64-byte indexed shape — both strings hold their hardgate-2 lengths, and every
 // field added is an integer, so the allocation schedule the bounds measure cannot move.
-// The envelope (v/seq/epoch) is deliberately LEFT AT ITS DEFAULT — the Outbox writes
+// The envelope (v/seq/epoch) is deliberately LEFT AT ITS DEFAULT — F-06: the Outbox writes
 // to no message field and the session stamps the envelope at pop, so a fixture stamping
 // its own envelope would blur the rule test_outbox.cpp's round-trip case pins — and the
 // whole-value comparison still asserts those defaults, so an Outbox that WROTE a stamp
@@ -216,13 +216,13 @@ TEST_CASE("outbox: draining the report queue allocates nothing per report", "[ou
 
 TEST_CASE("outbox: an enqueue that fails to allocate never consumes the caller's report",
           "[outbox]") {
-  // the outbox's headline rule — "order reports are NEVER dropped" — has to hold on the FAILURE
+  // Task 6's headline rule — "order reports are NEVER dropped" — has to hold on the FAILURE
   // path too: a report the caller can no longer retry IS a dropped report, and a dropped
   // report leaves the order's state undefined. The deque's own strong guarantee covers the
   // CONTAINER and says nothing about the ARGUMENT, which is why `push_report` binds the
   // caller's NAMED report — a non-const lvalue reference, so the lossy call forms (a
   // prvalue, a `std::move`d handoff, an implicit alternative conversion) do not compile at
-  // all — and consumes it only in the noexcept commit AFTER the allocation.
+  // all (hard gate) — and consumes it only in the noexcept commit AFTER the allocation.
   // Under the previous `OutMsg &&` binding this walk could prove the guarantee only for the
   // named-object call form while those other forms compiled and died in the unwind; now the
   // object that survives the throw IS the caller's own, and the retry below re-pushes the
@@ -306,9 +306,10 @@ TEST_CASE("outbox: an enqueue that fails to allocate never consumes the caller's
 }
 
 TEST_CASE("outbox: a valueless message pushed as a report is a programming error", "[outbox]") {
-  // The THIRD programming-error guard: a valueless-by-exception OutMsg answers
-  // false to EVERY holds_alternative, so it would slip the Tob guard, count against the report
-  // mark, and hand the session's pop-time visitor a std::bad_variant_access. The case lives in THIS
+  // The THIRD programming-error guard (hard gate; the other two are cased in
+  // test_outbox.cpp): a valueless-by-exception OutMsg answers false to EVERY
+  // holds_alternative, so it would slip the Tob guard, count against the report mark, and
+  // hand the session's pop-time visitor a std::bad_variant_access. The case lives in THIS
   // TU because only the injection probe can build the fixture: every OutMsg alternative is
   // nothrow-movable (asserted in outbox.hpp), which closes the MOVE routes to
   // valuelessness, but variant::emplace destroys its old value before constructing the new

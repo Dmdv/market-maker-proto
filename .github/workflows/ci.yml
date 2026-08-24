@@ -5,8 +5,9 @@
 # steps here would create a second definition of the gate that drifts from the first — which is
 # the exact failure this repository spent a day removing from its own scripts.
 #
-# GitHub's ubuntu-latest runners are native x86-64, so this is REAL target-arch evidence
-# fallback for a developer without an x86-64 host (record E-8, audit ).
+# GitHub's ubuntu-latest runners are native x86-64, so this is REAL target-arch evidence for
+# acceptance criterion 1 — strictly stronger than the local qemu smoke, which stays as the
+# fallback for a developer without an x86-64 host (record E-8, audit F-33).
 name: verify
 
 # QUOTED deliberately. YAML 1.1 lists `on` among its boolean literals, so an unquoted key parses

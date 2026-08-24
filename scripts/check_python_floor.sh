@@ -2,7 +2,7 @@
 # Substantiates the `requires-python = ">=3.11"` claim in python/pyproject.toml.
 #
 # WHY THIS EXISTS AS A SCRIPT rather than a sentence in a README: the floor is a PACKAGING claim,
-# and a packaging claim nobody executes is indistinguishable from a guess. The design (the sanitizer gate
+# and a packaging claim nobody executes is indistinguishable from a guess. The plan (Task 12
 # Step 4) asks for it to be run on a real 3.11 interpreter; run once by hand it would rot the
 # first time someone used a 3.12+ idiom in the shipped package.
 #

@@ -15,7 +15,7 @@
 //   release-copy    correct release publish — no runtime may report (false-positive
 //                   control).
 //
-// Measured, battery (2026-07-28), same flags both toolchains
+// Measured, Task 6.5 battery (2026-07-28), same flags both toolchains
 // (-std=c++20 -O1 -g -fsanitize=thread):
 //   Apple clang 21.0.0 arm64 (macOS dev host): relaxed-scalar REPORTED;
 //     relaxed-copy SILENT (also silent at -O0, where the copy is a literal memcpy call);
@@ -23,8 +23,8 @@
 //     toolchain the tsan preset verifies the ring's INDEX protocol only.
 //   ubuntu:26.04 g++ 15.2 libtsan (authoritative container): all four ring
 //     memory-ordering downgrade mutants REPORTED as data races on the million-record
-//     stress case (a dedicated stress battery covers this). => the container
-//     sanitizer matrix is where the ring's ordering contract is enforced.
+//     stress case (docs/TIME_LOG.md row 6.5 carries the battery ledger). => the container
+//     sanitizer matrix (Task 12) is where the ring's ordering contract is enforced.
 //
 // Build & run (host):      c++ -std=c++20 -O1 -g -fsanitize=thread \
 //                            bench/probes/tsan_struct_copy_probe.cpp -o /tmp/tsan_probe

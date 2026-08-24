@@ -1,5 +1,5 @@
-// Shared support for the engine test TUs (test_engine.cpp outgrew the 500-line
-// file cap; split along behavioral seams, mirroring the codec layer
+// Shared support for the Task 3 engine test TUs (test_engine.cpp outgrew the 500-line
+// file cap; split along behavioral seams, mirroring the Task 2
 // codec_test_support.hpp remedy):
 //   test_engine.cpp         — lifecycle/state-machine cases: new, duplicate, validation,
 //                             post-only entry, max-live + re-quote, cancel, constructor
@@ -7,7 +7,7 @@
 //   test_engine_session.cpp — session-lifetime cases: cross-session isolation, end_session
 //                             acks + reap, the UINT64_MAX key boundary, the entry cap
 //   test_engine_fills.cpp   — fill rule, absorbing terminals, md_seq guard, locked and
-//                             crossed books exogeneity, history-scaling regression
+//                             crossed books, F-30 exogeneity, history-scaling regression
 //                             (perf-tagged; see CMakeLists.txt)
 //   test_engine_alloc.cpp   — the measured per-call allocation inventory and on_new's strong
 //                             exception guarantee (arms the whole-binary global operator new

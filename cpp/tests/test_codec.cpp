@@ -1,5 +1,5 @@
-// tests: protocol structs + dual codec (naive nlohmann / tuned glaze) against the
-// golden fixtures in tests/golden/ — the cross-language contract (Python reads the
+// Task 2 tests: protocol structs + dual codec (naive nlohmann / tuned glaze) against the
+// golden fixtures in tests/golden/ — the cross-language contract (Python Task 4 reads the
 // same files). Both codecs must agree on every behavior pinned here — accept/reject
 // verdict AND RejectCode — and BOTH are pinned byte-identical to every outbound fixture
 // (canonical wire form; encode/decode contracts in codec.hpp).
@@ -7,7 +7,7 @@
 // This TU holds the contract / round-trip / encode / hardening-policy cases; the
 // arm-equivalence table and the traceability batteries live in
 // test_codec_equivalence.cpp, with shared helpers in codec_test_support.hpp
-//.
+// (gate P4-i2 — the 500-line file cap, same rationale as the frame_preflight.cpp split).
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
@@ -65,7 +65,8 @@ TEST_CASE("codec: decode is key-order-insensitive (canonical order is an encode-
 TEST_CASE("codec: outbound structs encode to the golden fixtures byte-for-byte", "[codec]") {
   // Canonical wire form — "t" first, then members in declaration order, no whitespace —
   // is the cross-language contract, so EVERY outbound fixture is raw-compared for BOTH
-  // arms (pinned for reproducible builds). The independent nlohmann parse additionally proves the
+  // arms (codex R1: only the tuned Tob was byte-pinned while the naive arm emitted
+  // alphabetically sorted keys). The independent nlohmann parse additionally proves the
   // bytes are valid JSON to a third reader.
   const auto kind = GENERATE(mm::CodecKind::Naive, mm::CodecKind::Tuned);
   INFO("codec = " << kind_name(kind));
@@ -89,8 +90,8 @@ TEST_CASE("codec: outbound structs encode to the golden fixtures byte-for-byte",
 TEST_CASE("codec: encode reuses the caller buffer across messages", "[codec]") {
   // Contract (codec.hpp): steady-state allocation-free. Warmed capacity AND the data
   // address must hold across repeated encodes of every outbound message — checking only
-  // for stale residue would let a fresh-DOM + fresh-dump implementation pass (pinned for
-  // reproducible builds).
+  // for stale residue would let a fresh-DOM + fresh-dump implementation pass (codex R1:
+  // the naive arm did exactly that).
   const auto kind = GENERATE(mm::CodecKind::Naive, mm::CodecKind::Tuned);
   INFO("codec = " << kind_name(kind));
   const auto codec = mm::make_codec(kind);
@@ -118,10 +119,10 @@ TEST_CASE("codec: encode reuses the caller buffer across messages", "[codec]") {
 TEST_CASE("codec: control characters in outbound strings escape identically in both arms",
           "[codec]") {
   // glaze's default writer copies raw 0x00..0x1F bytes from string values into the
-  // output — INVALID JSON for any decoded string that carried them (pinned for reproducible
-  // builds). Both arms must emit the SAME bytes (shorthand escapes plus uppercase hex u-escapes),
-  // and an independent reader must round-trip the exact original value. Every outbound message type
-  // carries at least one string field, so all five are exercised.
+  // output — INVALID JSON for any decoded string that carried them (codex R1). Both arms
+  // must emit the SAME bytes (shorthand escapes plus uppercase hex u-escapes), and an
+  // independent reader must round-trip the exact original value. Every outbound message
+  // type carries at least one string field, so all five are exercised.
   const auto naive = mm::make_codec(mm::CodecKind::Naive);
   const auto tuned = mm::make_codec(mm::CodecKind::Tuned);
   const std::string hostile =
@@ -238,7 +239,7 @@ TEST_CASE("codec: error battery — decode never throws, yields the right code",
 
 TEST_CASE("codec: nesting depth guard — bounded rejection, never stack exhaustion", "[codec]") {
   // A size-bounded but deeply nested unknown value must be REJECTED by policy, not
-  // recursed into (protocol rule: malformed input never terminates the process). Depth
+  // recursed into (assignment §3: malformed input never terminates the process). Depth
   // is counted ITERATIVELY in the shared preflight before either arm's recursive parser
   // runs (codec.hpp); the suite also runs under the asan preset, which turns any stack
   // overshoot into a hard failure.
@@ -267,7 +268,7 @@ TEST_CASE("codec: escaped-control policy — identifiers reject, unknown values 
   // cl_ids collide as order-map keys / in logs) and CR/LF forges records (CWE-158/117),
   // so the KNOWN identifier fields reject decoded bytes < 0x20 and 0x7F in both arms
   // while unknown/skipped values keep the permissive documented rule (codec.hpp,
-  // a review — this case previously pinned the NUL-in-cl_id frame as ACCEPTED).
+  // gate P4-i1 — this case previously pinned the NUL-in-cl_id frame as ACCEPTED).
   const auto kind = GENERATE(mm::CodecKind::Naive, mm::CodecKind::Tuned);
   INFO("codec = " << kind_name(kind));
   const auto codec = mm::make_codec(kind);

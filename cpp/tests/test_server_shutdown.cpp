@@ -1,4 +1,4 @@
-// integration — process SHUTDOWN: the signal disposition handed back on the way
+// Task 7 integration — process SHUTDOWN: the signal disposition handed back on the way
 // out, stop() refusing to be pinned by a peer (never-upgraded, or parked mid-frame), the
 // 1001 fan-out and the final snapshot that must agree with the counters, and the feed's
 // own two terminal events. Split from test_server_flow.cpp under the 500-line cap; the
@@ -194,7 +194,7 @@ TEST_CASE("server: stop() closes 1001 and the final snapshot matches the counter
   CHECK(final_totals["fills"] == counters.fills);
   CHECK(final_totals["sessions"] == 0); // pushed after every session folded its close
 
-  // The watermarks line carries the engine's stale-book drop counter (a backlog item
+  // The watermarks line carries the engine's stale-book drop counter (PENDING item (k):
   // lane 2 seated; the feed is monotonic by construction, so it reads zero).
   const auto watermarks = std::find_if(
       lines.begin(), lines.end(), [](const json &j) { return j.contains("stale_books_ignored"); });

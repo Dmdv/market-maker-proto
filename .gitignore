@@ -18,7 +18,7 @@ __pycache__/
 .pytest_cache/
 compile_commands.json
 
-# Local tool artifacts
+# Agent/codex session artifacts
 .session/
 
 # The engine defaults its telemetry to CWD when --telemetry-out is omitted, so a bare

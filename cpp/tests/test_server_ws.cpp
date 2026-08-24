@@ -1,4 +1,4 @@
-// integration — the HANDSHAKE and ADMISSION surface: subprotocol negotiation and
+// Task 7 integration — the HANDSHAKE and ADMISSION surface: subprotocol negotiation and
 // its refusals, the browser-origin gate, compression policy, the pre-upgrade read bounds
 // in body/header/time, the two admission tiers, and the socket options no peer can
 // observe. The frame-policy half is in test_server_frames.cpp.
@@ -261,7 +261,7 @@ TEST_CASE("server: a non-upgrade request is refused even when it names mm.v1", "
 }
 
 // The pre-upgrade read is the ONE read this engine performs for a peer that has proven
-// nothing, and Beast's defaults (1 MB body, 8 KiB header) are not a decision:
+// nothing, and Beast's defaults (1 MB body, 8 KiB header) are not a Task 7 decision:
 // measured on the shipped build before the bound, an upgrade declaring
 // Content-Length: 900000 was read in full and STILL answered 101, so max_sessions pending
 // upgrades each reached ~1 MB of heap before the mm.v1 gate ran. The third section is the

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The A/B profiling exhibit (the designb, the design record): a flamegraph of the engine under a
+# The §6 profiling exhibit (plan Task 13 Step 2b, record A1): a flamegraph of the engine under a
 # real tuned client, captured IN-CONTAINER because that is where the authoritative numbers come
 # from and a macOS profile would characterise a different kernel, allocator and scheduler.
 #
@@ -18,7 +18,7 @@
 #                    65528 stack-chunk size is the max perf accepts; the default (8192) is
 #                    enough for shallow stacks but truncates deep boost/asio unwind chains.
 #   /usr/bin/perf    Invoked DIRECTLY. ubuntu:26.04 ships perf via the `linux-perf` package as a
-#                    real binary with no kernel-version wrapper — the `perf` on PATH
+#                    real binary with no kernel-version wrapper (F-25 probe) — the `perf` on PATH
 #                    on some distributions is a shim that refuses to run when the running kernel
 #                    does not match the package version, which inside a VM it never does.
 #   --privileged     REQUIRED on Docker Desktop, not a convenience. Measured chain of necessity:
@@ -35,7 +35,7 @@
 #                    it to https://debuginfod.ubuntu.com by default, and perf then hangs
 #                    indefinitely in buildid-list / report trying to fetch over the network.
 #
-# The run profiled is TUNED IDLE: the arm the A/B result is claimed for, in the mode with no
+# The run profiled is TUNED IDLE: the arm the §6 result is claimed for, in the mode with no
 # market-data traffic competing for the owner thread, so what dominates the profile is the
 # request/response path rather than the feed.
 #
@@ -133,7 +133,7 @@ docker run -d --name "$NAME" --cpus 6 --memory 8g --privileged \
   echo "engine pid=$ENGINE_PID port=$PORT"
 
   # perf attached to the ENGINE, while a real tuned client drives it. Profiling the engine rather
-  # than the client because the A/B attributes the C++ side separately from the Python side.
+  # than the client because §6 attributes the C++ side separately from the Python side.
   # NO TRAILING COMMAND. This read `-- sleep 1`, which bounds the recording to one second — and
   # that second elapses while the engine is still idle waiting for the client to connect. With
   # `-e task-clock` an idle process emits NO samples (the counter only advances while the task is
@@ -169,7 +169,7 @@ docker run -d --name "$NAME" --cpus 6 --memory 8g --privileged \
   test -s /tmp/perf.data || { echo "FATAL: perf.data is empty — perf collected nothing" >&2; exit 1; }
 
   # THREE artifacts: the human-readable report, the RAW per-sample stacks, and genuinely
-  # collapsed stacks (the design asks for "perf report --stdio + collapsed stacks").
+  # collapsed stacks (the plan asks for "perf report --stdio + collapsed stacks").
   #
   # `perf script` output is NOT collapsed — it is one indented frame per line per sample, and the
   # earlier comment here called it collapsed stacks, which would have sent a reader to feed the

@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# The seven-step functional demonstration, for a human reader — all SEVEN steps the assignment names.
+# The §4 functional demonstration, for a human reader — all SEVEN steps the assignment names.
 #
 # Builds NOTHING: it runs what is already built, so what a reviewer sees is what CI tested.
 # `make demo` builds `rel` first and then calls this. The same checkpoints are asserted by
 # python/tests/test_integration_demo.py — that file is the one that fails a build, this one is
-# the one you watch. If they ever disagree, believe the test.
+# the one you watch. If they ever disagree, believe the test (audit F-06: a demo nobody runs in
+# CI stops being true quietly).
 #
-# EVERY CHECKPOINT BELOW MAPS TO A NUMBERED DEMO STEP, and each is read from the engine's own
+# EVERY CHECKPOINT BELOW MAPS TO A NUMBERED STEP OF §4, and each is read from the engine's own
 # telemetry rather than from the client's narration — the engine is the authority on what
 # happened to the order book, and a demo that quoted the client back to itself would prove only
 # that the client is self-consistent.
@@ -96,7 +97,7 @@ say "Starting the engine (engine codec=$STACK, 50 ms feed ticks, ephemeral port)
 # THE ENGINE'S CODEC FOLLOWS THE ARM. This was hardcoded `--codec tuned`, so `MM_STACK=naive`
 # swapped only the PYTHON adapter and the demo still ran glaze underneath while its closing line
 # announced "(naive stack)". That is the same defect the benchmark runner had -- fixed there,
-# missed here -- and it matters for the same reason: the ratified the A/B swap is
+# missed here -- and it matters for the same reason: the ratified §6 swap is
 # websockets+asyncio+stdlib+nlohmann -> picows+uvloop+msgspec+glaze, four components across two
 # languages, so a demo that moves three of them is not demonstrating the naive arm.
 "$ENGINE" --feed "$FEED" --port 0 --codec "$STACK" --interval-ms 50 \
@@ -146,7 +147,7 @@ kill -TERM "$CLIENT_PID" 2>/dev/null || true
 wait "$CLIENT_PID" 2>/dev/null || true
 wait "$INTRUDER_PID" 2>/dev/null || true
 
-say "Checkpoints — the seven demo steps"
+say "Checkpoints — the seven steps of §4"
 telemetry_has() { grep -q "\"event\":\"$1\"" "$TELEMETRY" 2>/dev/null; }
 
 # (1) the engine published a two-sided book and the client connected to receive it.
@@ -182,12 +183,12 @@ else
 fi
 
 # (5) THE DETERMINISTIC FILL. demo.feed drops the ask to 500000 at t=700 ms, crossing a resting
-# bid at 500000 — the fill rule is "a resting bid at P fills when ask_px <= P".
+# bid at 500000 — the fill rule is "a resting bid at P fills when ask_px <= P" (03 §3.3).
 FILLS="$(peak fills)"
 if [[ "${FILLS:-0}" -ge 1 ]]; then
   ok "5. the engine generated a deterministic fill and the client re-quoted (fills=$FILLS)"
 else
-  bad "5. no fill occurred — demo step 5 was not demonstrated"
+  bad "5. no fill occurred — step 5 of §4 was not demonstrated"
 fi
 
 # (6) the intruder's malformed frame was refused, and refused on ITS session.
@@ -239,7 +240,7 @@ tail -2 "$ENGINE_LOG" | sed 's/^/   /'
 grep -h "^intruder:" "$CLIENT_LOG" | sed 's/^/   /' || true
 
 if [[ "$FAILURES" -eq 0 ]]; then
-  printf '\n\033[32mDEMO PASSED\033[0m — all seven demo steps (%s stack)\n\n' "$STACK"
+  printf '\n\033[32mDEMO PASSED\033[0m — all seven §4 steps (%s stack)\n\n' "$STACK"
 else
   printf '\n\033[31mDEMO FAILED\033[0m — %d checkpoint(s) (%s stack)\n\n' "$FAILURES" "$STACK"
   exit 1

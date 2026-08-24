@@ -1,4 +1,4 @@
-// Telemetry tests: the telemetry writer thread, the counters snapshot and the JSON-lines
+// Task 6.5 tests: the telemetry writer thread, the counters snapshot and the JSON-lines
 // emission — the consumer part of the telemetry suite (seam map in
 // telemetry_test_support.hpp: the ring is cased in test_telemetry.cpp, the writer's
 // failure paths in test_telemetry_errors.cpp, the run markers / fallback shapes / drain
@@ -10,7 +10,7 @@
 // snapshot does not fit one record's payload, and each part emits as its own complete JSON
 // line so a ring-full drop of one part loses exactly that part and the writer never
 // stitches partial state (the mapping is constexpr, so the case pins it at compile time;
-// since the a review wire batch the watermarks part also seats telemetry_pending_hw and
+// since the gate P4-i1 wire batch the watermarks part also seats telemetry_pending_hw and
 // live_orders, each emitted as its own named key); event records carry their code and
 // args, and defined codes have wire names — all four named events are pinned as golden
 // writer lines, session_open and session_close deliberately so: their codes (0 and 1) are
@@ -20,9 +20,9 @@
 // the open and close run markers (the markers' own shapes are pinned in
 // test_telemetry_wire.cpp; here they are counted and skipped); the destructor stops the
 // thread promptly (the poll wait is interruptible), joins it, and flushes every record
-// still in the ring — the design's "file contains the last record after destruction"; the
+// still in the ring — the plan's "file contains the last record after destruction"; the
 // drop count to date rides every totals line, which is the "reported in next snapshot"
-// clause of the design's `dropped()` contract made concrete; a record with an undefined
+// clause of the plan's `dropped()` contract made concrete; a record with an undefined
 // shape still emits, self-describing, rather than being silently discarded
 // (count-every-drop discipline); the shipped default poll (TelemetryWriter::kDefaultPoll)
 // is pinned to its exact 10 ms value at compile time, with the runtime
@@ -39,7 +39,7 @@
 // shapes are not, bench/probes/tsan_struct_copy_probe.cpp).
 //
 // Lines are pinned as EXACT strings, golden-bytes style: the telemetry file is a wire-ish
-// surface the server layer's integration tests grep (`hwm_close`, `telemetry_dropped`), so its
+// surface Task 7's integration tests grep (`hwm_close`, `telemetry_dropped`), so its
 // format is contract, not presentation.
 #include <catch2/catch_test_macros.hpp>
 
@@ -219,8 +219,8 @@ TEST_CASE("telemetry: a grouping global locale cannot reshape the emitted number
   // The constructor's imbue-classic pin (telemetry.hpp): the lines are a machine-read
   // surface, and out_ is CONSTRUCTED while the grouping locale is global, so without the
   // imbue every number past the grouping threshold would emit grouped ("1,234,567") —
-  // structurally invalid JSON on the surface the server layer's integration tests parse. Both
-  // stamps sit past that threshold, so the mutant cannot pass by small-number coincidence.
+  // structurally invalid JSON on the surface Task 7's integration tests parse. Both stamps
+  // sit past that threshold, so the mutant cannot pass by small-number coincidence.
   const TempPath out{"locale"};
   mm::SpscTelemetryRing ring;
   {
@@ -244,12 +244,12 @@ TEST_CASE("telemetry: a grouping global locale cannot reshape the emitted number
 }
 
 TEST_CASE("telemetry: the default poll drains a quiet ring promptly", "[telemetry]") {
-  // The VALUE pin: the design ships exactly 10 ms. The runtime half below bounds GROSS
+  // The VALUE pin: the plan ships exactly 10 ms. The runtime half below bounds GROSS
   // drift only — its wait deadline is 10 s, so a default drifted to (say) 1000 ms would
   // still pass it; any smaller drift is this line's catch, at compile time.
   STATIC_REQUIRE(mm::TelemetryWriter::kDefaultPoll == std::chrono::milliseconds(10));
   // The behavioral half — the one case that constructs the writer WITHOUT a poll
-  // argument, because does and the shipped default is therefore the live-drain
+  // argument, because Task 7 does and the shipped default is therefore the live-drain
   // latency of an idle engine. The record is pushed only after the thread has passed its
   // startup drain into the timed wait (the dtor case's 50ms pattern), so the line below
   // can appear only via a poll WAKE: a default drifted past the wait deadline reds the

@@ -1,5 +1,8 @@
-// Engine entry point: CLI -> Config -> Server. One startup line, one shutdown line, nothing per
-// message on stdout — periodic state goes to the telemetry file. Any startup failure: stderr, 2.
+// Engine entry point (plan Task 7): CLI -> Config -> Server, one startup line, one
+// shutdown line, and NOTHING per message on stdout — periodic state goes to the
+// telemetry file (record A1). Ops failure paths (F-12): any startup failure — bad flag,
+// unbindable port, missing/malformed feed, unopenable telemetry path — is one stderr
+// line + exit 2.
 #include "mm/server.hpp"
 
 #include <cinttypes>
@@ -19,8 +22,11 @@ constexpr const char *kUsage =
     "                 [--max-session-entries N] [--upgrade-timeout-ms N]\n"
     "       mm_engine --version\n";
 
-// `--version` prints the toolchain too: the benchmark manifest reads it from THIS binary rather
-// than inferring the compiler from its own environment. CMake stamps the fields.
+// WHAT `--version` IS FOR, and why it prints more than a version. The §5.2 benchmark manifest
+// records the toolchain that produced every latency number, and it reads that from THIS binary
+// rather than re-deriving it — a harness that inferred the compiler from its own environment
+// would happily describe a stale build as a fresh one. Every field is stamped by CMake at
+// configure time (see the target_compile_definitions block in CMakeLists.txt).
 [[noreturn]] void print_version() {
   std::printf("mm_engine %s\n", MM_ENGINE_VERSION);
   std::printf("compiler: %s\n", MM_ENGINE_COMPILER);
@@ -34,7 +40,9 @@ constexpr const char *kUsage =
 [[noreturn]] void usage_error(std::string_view detail) {
   std::fprintf(stderr, "mm_engine: %.*s\n%s", static_cast<int>(detail.size()), detail.data(),
                kUsage);
-  // Parsing runs before any thread exists (main's first statement), so exit's unsafety cannot bite.
+  // Argument parsing runs strictly before any thread exists (main's first statement), so
+  // exit's thread-unsafety cannot bite; the alternative — threading an error status back
+  // through every parse helper — buys nothing at this call depth.
   std::exit(2); // NOLINT(concurrency-mt-unsafe)
 }
 
@@ -65,14 +73,17 @@ mm::Config parse_args(int argc, char **argv) {
         usage_error(std::string{arg} + ": missing value");
       return argv[++i];
     };
-    // FIRST, before the value-taking lambda: `--version` takes no value and needs no --feed.
+    // FIRST, and before the value-taking lambda can be reached: `--version` takes no value,
+    // and a reviewer running it on a binary built without --feed must not be told a flag is
+    // missing instead of being told the version.
     if (arg == "--version") {
       print_version();
     } else if (arg == "--port") {
       cfg.port = static_cast<std::uint16_t>(parse_int(arg, value(), 0, 65535));
     } else if (arg == "--bind") {
-      // Exposing an engine that authenticates nothing beyond loopback is an operator ACT, so it
-      // has a flag and no default. The Server constructor validates it.
+      // Exposing an engine that authenticates nothing beyond loopback is an operator ACT,
+      // so it has a flag and no default. Validated by the Server constructor, which owns
+      // every other Config verdict (F-12).
       cfg.bind_address = std::string{value()};
     } else if (arg == "--feed") {
       cfg.feed_path = std::string{value()};
@@ -97,8 +108,10 @@ mm::Config parse_args(int argc, char **argv) {
     } else if (arg == "--telemetry-verbose") {
       verbose_requested = true;
     } else if (arg == "--max-sessions") {
-      // The two admission bounds MULTIPLY into worst-case resident memory (mm/server.hpp), so
-      // both are operator-reachable: more of one is paid for with less of the other.
+      // The two admission bounds MULTIPLY into the engine's worst-case resident memory
+      // (mm/server.hpp does that arithmetic), which is why both are reachable from here:
+      // an operator who needs more of one can pay for it by lowering the other, and
+      // neither can be raised by a peer.
       cfg.max_sessions = static_cast<std::size_t>(parse_int(arg, value(), 1, 4096));
     } else if (arg == "--max-session-entries") {
       cfg.max_session_entries = static_cast<std::size_t>(parse_int(arg, value(), 1, 1 << 24));
@@ -110,7 +123,8 @@ mm::Config parse_args(int argc, char **argv) {
   }
   if (cfg.feed_path.empty())
     usage_error("--feed is required");
-  // Per-message telemetry is forced OFF under measurement; saying so beats silently dropping it.
+  // Per-message telemetry is forced OFF under measurement (record A1 / §5.2); saying so
+  // beats silently un-setting a flag the operator typed.
   cfg.telemetry_verbose = verbose_requested && cfg.bench_out.empty();
   if (verbose_requested && !cfg.bench_out.empty())
     std::fprintf(stderr, "mm_engine: --telemetry-verbose is forced off under --bench-out "
@@ -124,7 +138,8 @@ int main(int argc, char **argv) {
   try {
     const mm::Config cfg = parse_args(argc, argv);
     mm::Server server{cfg, mm::Instrument{.symbol = "MOCKUSDT"}};
-    // MM_ENGINE_VERSION is injected by CMake from project(VERSION) — the single source of truth.
+    // MM_ENGINE_VERSION is injected by CMake from project(VERSION) — the single C++
+    // source of truth.
     std::printf("mm_engine %s listening port=%u codec=%s instrument=MOCKUSDT feed=%s\n",
                 MM_ENGINE_VERSION, server.port(),
                 cfg.codec == mm::CodecKind::Tuned ? "tuned" : "naive", cfg.feed_path.c_str());

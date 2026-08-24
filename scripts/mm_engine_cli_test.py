@@ -3,9 +3,9 @@
 
 Everything below cpp/src/main.cpp used to be unreachable from the suite: CMakeLists builds
 mm_engine and nothing ran it, so the CLI surface (flag names, ranges, trailing-character
-rejection), the ops contract (one stderr line + exit 2 on any startup failure), the
+rejection), the F-12 ops contract (one stderr line + exit 2 on any startup failure), the
 startup/shutdown line formats and the admission defaults were pinned by nothing at all.
-Plan makes that flag surface a downstream contract ("confirm CLI flags used
+Plan Task 11 Step 0 makes that flag surface a downstream contract ("confirm CLI flags used
 here exist in main.cpp"), so it needs a fixture, not a reviewer's memory.
 
 Run by ctest as `mm_engine_cli`; the engine's path is argv[1] (a CMake generator expression,
@@ -159,7 +159,7 @@ def host_address() -> str | None:
 
 
 def arm_startup_failures(engine: str, tmp: str) -> None:
-    """every startup failure is ONE stderr line plus exit 2 — and nothing on stdout,
+    """F-12: every startup failure is ONE stderr line plus exit 2 — and nothing on stdout,
     because a half-written startup line is what an operator's log scraper would trip over.
     Kills: a parse helper that clamps instead of refusing (--hwm 0 would start at 1), a
     stoll that ignores trailing characters (--interval-ms 12x would run at 12), an unknown
@@ -246,7 +246,7 @@ def arm_case_variant_collision(engine: str, tmp: str) -> None:
 
 
 def arm_lifecycle_lines(engine: str, tmp: str) -> None:
-    """The two lines ops reads, and NOTHING per message between them . The
+    """The two lines ops reads, and NOTHING per message between them (record A1). The
     shutdown line's telemetry_ok digit is the run's health verdict (T-16) and must read 1
     on a clean run. Kills: a shutdown line that loses a counter or prints telemetry_ok as
     true/false, a startup line that stops reporting the BOUND port (breaking every
@@ -285,7 +285,7 @@ def arm_lifecycle_lines(engine: str, tmp: str) -> None:
 
 
 def arm_verbose_forced_off(engine: str, tmp: str) -> None:
-    """--telemetry-verbose under --bench-out is refused OUT LOUD: the
+    """--telemetry-verbose under --bench-out is refused OUT LOUD (record A1 / §5.2): the
     per-message events would distort the very run being measured. Kills: silently unsetting
     the flag the operator typed — the run would then measure correctly and the operator
     would never learn why the events are missing — and, in the other direction, honouring
@@ -470,7 +470,7 @@ def arm_bench_dump_peak_sessions(engine: str, tmp: str) -> None:
 
 
 def arm_version_stamp(engine: str, tmp: str) -> None:
-    """`--version` prints the toolchain the benchmark benchmark manifest records.
+    """`--version` prints the toolchain the §5.2 benchmark manifest records.
 
     Pinned because the manifest READS these lines from the binary rather than re-deriving them —
     a harness that inferred the compiler from its own environment would happily describe a stale

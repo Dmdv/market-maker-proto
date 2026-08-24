@@ -1,8 +1,15 @@
-// Protocol structs. Wire field names are exactly the JSON keys in docs/PROTOCOL.md; the "t"
-// tag is not a member but the variant discriminator (kTag* below).
+// Protocol structs (plan Task 2; interfaces normative for later tasks).
 //
-// DECLARATION ORDER IS THE WIRE KEY ORDER: both codecs emit members in that order after the "t"
-// tag and the golden fixtures pin it byte-for-byte, so reordering a member changes the wire.
+// Wire field names are EXACTLY the JSON keys documented in docs/PROTOCOL.md, and member
+// DECLARATION ORDER IS THE WIRE KEY ORDER: BOTH codecs emit members in declaration order
+// after the leading "t" tag (canonical wire form — codec.hpp), and the golden fixtures
+// (tests/golden/) pin that byte-for-byte on EVERY outbound message, for both arms.
+// Reordering a member is a wire-format change. Decoding stays key-order-insensitive.
+//
+// The "t" tag is not a struct member — it is the variant discriminator (kTag* below).
+// Envelope on every message: v(=1), t, seq (per-direction per-session, from 1, never
+// gaps), epoch (engine-assigned per connection). Tob additionally carries md_seq
+// (may gap = conflation; decrease = fatal).
 #pragma once
 
 #include <cstdint>
@@ -12,8 +19,9 @@
 
 namespace mm {
 
-// The verbatim two-column layout keeps declaration order (== wire key order) auditable at a
-// glance; reformatting would rewrap it and bury the order.
+// The fence below is deliberate, not formatter debt: the plan's verbatim two-column
+// layout is retained so member declaration order (== wire key order, see above) stays
+// auditable at a glance; formatting would rewrap it and bury the order.
 // clang-format off
 struct Tob      { std::uint64_t v{1}, seq{}, epoch{}, md_seq{}; std::string symbol;
                   std::int64_t bid_px{}, bid_qty{}, ask_px{}, ask_qty{};
@@ -40,7 +48,7 @@ struct Fill      { std::uint64_t v{1}, seq{}, epoch{}; std::string cl_id; std::u
 using InMsg = std::variant<NewOrder, CancelOrder>;
 using OutMsg = std::variant<Tob, OrderAck, CancelAck, Reject, Fill>;
 
-// Wire "t" tags — the single spelling shared by both codecs and the Python client.
+// Wire "t" tags — the single spelling both codecs (and Python, Task 4) share.
 inline constexpr std::string_view kTagTob = "top_of_book";
 inline constexpr std::string_view kTagNewOrder = "new_order";
 inline constexpr std::string_view kTagCancelOrder = "cancel_order";

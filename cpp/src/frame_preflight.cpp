@@ -1,5 +1,15 @@
-// Shared frame authority for BOTH codec arms (contract in codec.hpp): strict UTF-8, the
-// iterative RFC 8259 scan, the integral-token predicates, tag/identifier policy. No parser deps.
+// Shared frame authority (plan Task 2; the full contract lives in codec.hpp): everything
+// BOTH codec arms run or share around a decode, split out of codec_nlohmann.cpp (gate
+// P4-i1 — the library-agnostic authority is not naive-arm code, and a dedicated TU keeps
+// it directly unit-testable and every source file under the 500-line cap):
+//   * utf8_valid           — strict RFC 3629 byte validation
+//   * FrameScanner         — the ITERATIVE full-grammar RFC 8259 scan
+//   * frame_preflight      — BOM/UTF-8 policy + scan + top-level key policy
+//   * is_integer_token / is_unsigned_integer_token — the ONE integral-token predicate
+//     pair both arms apply to FrameScan spans before any library extraction
+//   * sanitized_tag        — safe rendering of the peer tag for DecodeError.detail
+//   * check_inbound_strings — identifier length caps + control-byte policy
+// This TU is pure byte/string logic: no third-party parser dependency, by design.
 #include "mm/codec.hpp"
 
 #include <cassert>
@@ -11,8 +21,9 @@
 namespace mm::detail {
 namespace {
 
-// Strict RFC 3629 UTF-8: rejects overlong forms, surrogate code points, values past U+10FFFF,
-// stray continuation bytes and truncated tails.
+// Strict RFC 3629 UTF-8: rejects overlong forms (C0/C1 leads, E0 with 80..9F, F0 with
+// 80..8F), surrogate code points (ED with A0..BF), values past U+10FFFF (F5.. leads, F4
+// with 90..BF), stray continuation bytes and truncated tails.
 bool utf8_valid(std::string_view s) {
   const auto *p = reinterpret_cast<const unsigned char *>(s.data());
   const auto *const end = p + s.size();
@@ -57,8 +68,22 @@ bool utf8_valid(std::string_view s) {
 
 constexpr bool is_dec_digit(unsigned char c) { return c >= '0' && c <= '9'; }
 
-// ONE iterative full-grammar RFC 8259 pass — the single JSON authority for BOTH arms: number
-// tokens are checked by SHAPE, never converted; depth capped via a 64-bit mask, no recursion.
+// One ITERATIVE full-grammar pass over the frame bytes — the single authority for JSON
+// grammar in BOTH arms (grok R1, S2; contract in codec.hpp). Validates the RFC 8259
+// grammar for every value (nested ones included), with number tokens checked by SHAPE
+// only and never converted, so token magnitude cannot affect the verdict. Also enforces
+// the nesting-depth cap (container kinds live in a 64-bit mask — no recursion, no
+// allocation), the raw-control-byte policy, the escaped-surrogate pairing rule both
+// libraries share, the single-top-level-value rule (trailing bytes reject), and records
+// the root object's top-level key/value spans into `out_` (fixed capacity; past the cap
+// rejects). The root-is-an-object policy is checked AFTER the grammar pass so parse
+// errors keep precedence.
+//
+// Extracted from a lambda-heavy function into a named class (gate P4-i1): the cursor
+// state five by-reference lambdas used to share is now named members, and every rejection
+// carries a site-specific reason plus the deterministic byte offset (observability — an
+// operator can tell a truncated frame from a stray trailing byte and locate it; the scan
+// is the shared authority, so both arms still emit byte-identical details).
 class FrameScanner {
 public:
   FrameScanner(std::string_view frame, FrameScan &out) : f_(frame), out_(out) {}
@@ -86,8 +111,10 @@ private:
       ++i_;
   }
 
-  // RFC 8259 §6, lexically: optional '-', "0" or nonzero-led digits, optional frac (>= 1 digit),
-  // optional exponent (optional sign, >= 1 digit). Junk after the token fails structurally ("01").
+  // RFC 8259 §6, lexically: optional '-', "0" or nonzero-led digits, optional frac with
+  // >= 1 digit, optional exponent with optional sign and >= 1 digit. Leaves `i_` just
+  // past the token; the structural rules reject junk that follows (so "01" and "0x10"
+  // fail as garbage-after-value).
   bool scan_number() {
     const std::size_t n = f_.size();
     if (f_[i_] == '-')
@@ -139,8 +166,10 @@ private:
     return cu;
   }
 
-  // `i_` at the opening quote; on Ok leaves it past the closing quote. Escapes are validated,
-  // surrogate pairing included (both libraries reject unpaired ones, so the shared scan must).
+  // `i_` at the opening quote; leaves `i_` past the closing quote on Ok. Escapes are
+  // validated (including surrogate pairing — BOTH libraries reject unpaired surrogate
+  // escapes, so the shared scan must keep that verdict shared); bytes >= 0x20 pass
+  // through — the frame-wide UTF-8 check already ran.
   Tok scan_string() {
     const std::size_t n = f_.size();
     ++i_;
@@ -205,8 +234,10 @@ private:
   // or finish the top-level value.
   std::optional<DecodeError> value_done() {
     if (depth_ == 1 && have_pending_key_) {
-      // Invariant: `value_start_` is set on ENTRY to every depth-1 value and consumed exactly
-      // once, here — the container-close paths decrement `depth_` before calling in.
+      // Invariant: `value_start_` is set on ENTRY to every depth-1 value (the St::Value
+      // branch) and consumed exactly once — here, when that same value closes. The two
+      // `depth_ == 1` tests refer to the same value even though the container-close
+      // paths decrement `depth_` before calling in.
       assert(value_start_ < i_);
       if (out_.count == kMaxTopLevelKeys)
         return reject("too many top-level keys");
@@ -372,8 +403,16 @@ std::optional<DecodeError> check_identifier(std::string_view value, std::string_
 
 } // namespace
 
-// Every numeric field is an integer count of ticks/lots/sequence, so a KNOWN integer field's
-// token must be integral. Both arms apply this before extraction; only RANGE stays per-arm.
+// Every numeric field in this protocol is an integer count of ticks/lots/sequence (docx
+// §2: "integer ticks and lots rather than binary floating-point values"), so a KNOWN
+// integer field's wire token must be integral — float/exponent spellings reject. The
+// predicate pair is the ONE expression of that policy: both arms apply it to the
+// preflight's FrameScan spans BEFORE any library extraction, so the verdict can never
+// drift into a library quirk (gate P4-i1; the structural lesson of codec.hpp:
+// nlohmann's is_number_integer() and glaze's reader disagree at the margins). The
+// predicates kill non-integral spellings, and for unsigned fields ALSO the sign — both
+// arms gate u64 fields on is_unsigned_integer_token (gate P4-i2), so only RANGE
+// verdicts stay with each arm's typed conversion.
 bool is_integer_token(std::string_view raw) noexcept {
   if (raw.starts_with('-'))
     raw.remove_prefix(1);
@@ -384,8 +423,12 @@ bool is_unsigned_integer_token(std::string_view raw) noexcept {
   return !raw.empty() && raw.find_first_not_of("0123456789") == std::string_view::npos;
 }
 
-// The peer tag is attacker-sized and reaches Reject reasons and log lines: truncate on a UTF-8
-// boundary, mark the cut, and replace control bytes with '?' (CWE-117 log forgery, CWE-400).
+// Renders the peer-supplied tag safely for DecodeError.detail (contract in codec.hpp):
+// the raw tag is attacker-sized (up to the 64 KiB transport cap) and may carry escaped
+// control bytes, and detail feeds the outbound Reject reason and log lines — so truncate
+// to kMaxTagDetailBytes on a UTF-8 code-point boundary (the decoded tag is valid UTF-8
+// by construction), mark the cut with an ellipsis, and replace control bytes (< 0x20,
+// 0x7F) with '?' (CWE-117/116 log forgery, CWE-400 allocation amplification).
 std::string sanitized_tag(std::string_view tag) {
   std::size_t take = tag.size() <= kMaxTagDetailBytes ? tag.size() : kMaxTagDetailBytes;
   while (take > 0 && take < tag.size() && (static_cast<unsigned char>(tag[take]) & 0xC0) == 0x80)

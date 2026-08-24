@@ -1,8 +1,8 @@
-// integration — the session EPOCH lifecycle: what a connection owns and what it
+// Task 7 integration — the session EPOCH lifecycle: what a connection owns and what it
 // gives back. Live-order cancellation at disconnect and at close INTENT (which are
-// different instants), the fresh epoch a reconnect mints, the stale-epoch verdict,
-// cross-session isolation, the close-code recording of a peer-chosen close,
-// and the entry-cap policy close (a backlog item Split from test_server_session.cpp
+// different instants), the fresh epoch a reconnect mints, the stale-epoch verdict (F-12),
+// cross-session isolation (F-01/F-07), the close-code recording of a peer-chosen close,
+// and the entry-cap policy close (PENDING item (i)). Split from test_server_session.cpp
 // when the Phase-4 gate work carried it past the repository's 500-line cap, along the same
 // behavioural seam the original split used: that file keeps the per-message path (service
 // acks and their svc_ns pairing, report ordering, inbound and outbound sequencing), this
@@ -102,7 +102,7 @@ TEST_CASE("server: a close INTENT cancels the live orders, not the teardown behi
   // latch point through begin_close, which is every intent site a peer can drive. The
   // other two — the 1009 mid-reassembly close and the 1011 empty-encode close — latch
   // through the same call but have no window and no seam respectively;
-  // the limitations backlog carries both with the measurement.
+  // docs/PENDING_AMENDMENTS.md item (t)13 carries both with the measurement.
   FeedFile feed{R"({"halt_ms":300})", R"({"set":[500000,100,500010,80]})", R"({"halt_ms":700})",
                 R"({"set":[499990,100,500000,120]})", R"({"halt_ms":100})"};
   auto cfg = heartbeat_config(feed);
@@ -223,7 +223,7 @@ TEST_CASE("server: a reconnect gets a fresh epoch and the live-order gauge retur
   CHECK(next_of(second, "top_of_book")["epoch"] == 2);
 }
 
-TEST_CASE("server: a stale-epoch command is rejected and the session stays up", "[server]") {
+TEST_CASE("server: a stale-epoch command is rejected and the session stays up (F-12)", "[server]") {
   auto feed = heartbeat_feed();
   ServerRunner srv{heartbeat_config(feed)};
 
@@ -258,7 +258,7 @@ TEST_CASE("server: a stale-epoch command is rejected and the session stays up", 
   CHECK(unknown["cl_id"] == "stale-1");
 }
 
-TEST_CASE("server: cross-session isolation", "[server]") {
+TEST_CASE("server: cross-session isolation (F-01/F-07)", "[server]") {
   auto feed = heartbeat_feed();
   ServerRunner srv{heartbeat_config(feed)};
 
@@ -296,7 +296,7 @@ TEST_CASE("server: cross-session isolation", "[server]") {
 TEST_CASE("server: entry-cap breach closes 1008 and other sessions are unaffected", "[server]") {
   auto feed = heartbeat_feed();
   auto cfg = heartbeat_config(feed);
-  cfg.max_session_entries = 4; // test-sized (a backlog item
+  cfg.max_session_entries = 4; // test-sized (PENDING item (i)3)
   ServerRunner srv{cfg};
 
   WsClient victim{srv.port()};

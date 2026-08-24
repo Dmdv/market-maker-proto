@@ -1,12 +1,12 @@
-# BENCHMARK — the measurement, its method, and what it does and does not establish
+# BENCHMARK — the §5.2 measurement, its method, and what it does and does not establish
 
-Authoritative run id: `20260730T220711Z` — 46 runs taken after a discarded burn-in
+Authoritative run: `bench/results/20260730T220711Z` — 46 runs taken after a discarded burn-in
 cycle: 42 primaries (7 repeats × 6 cells) plus 4 non-primary saturation probes. A pre-registered
 peer audit (`scripts/bench_peer_audit.py`) excluded 2 of the 42 primaries for anomalous outlier
-clustering against their siblings; the 40 published runs all qualify under the primary gate
-(`rejects = 0`, engine recorder refused 0, no send-stream gaps). Every raw `.i64` series, engine
-dump and per-run manifest — **including the two excluded runs** — is retained offline and
-available on request; this document carries the full per-run tables. §9 discloses the exclusions and shows the verdict is insensitive to them.
+clustering against their siblings; the 40 published runs all qualify under the §5.2 gate
+(`rejects = 0`, engine recorder refused 0, no send-stream gaps). Every raw `.i64` series, every
+engine dump and every per-run manifest — **including the two excluded runs** — is committed
+alongside this document. §9 discloses the exclusions and shows the verdict is insensitive to them.
 
 **The headline, stated once and precisely.** Swapping the whole client/engine stack —
 `websockets + asyncio + stdlib json + nlohmann` → `picows + uvloop + msgspec + glaze` — moved the
@@ -21,7 +21,7 @@ number in this document.
 ## 1. What was measured, and where the clocks sit
 
 Three intervals, each **entirely within one process**, so nothing here requires two processes to
-share a clock origin. That is a hard requirement of the method, not a convenience, and §7 returns to it.
+share a clock origin. That is a §2.1 requirement, not a convenience, and §7 returns to it.
 
 ```mermaid
 sequenceDiagram
@@ -333,7 +333,7 @@ artifact of the simulator getting faster at talking to itself.
 > path; transport and Python numbers transfer to a production gateway; venue-sim internals are
 > reported but claim nothing.*
 
-## 6. Secondary probes — the saturation question, labelled NON-PRIMARY
+## 6. Secondary probes — the E-5 saturation question, labelled NON-PRIMARY
 
 These answer "do queues build", not "what is p99". One run each, ≥20,000 samples. **No percentile
 claim is made from them.**
@@ -381,7 +381,7 @@ quoted as a service-latency ratio. It is schedule-to-ACK, and for the naive arm 
 that fixed ~half-period offset. The service comparison is the actual-send row:
 160.2 µs vs 38.1 µs.
 
-## 7. Clock-domain compliance
+## 7. §2.1 timestamps compliance
 
 No wall clock rides the wire, and no interval subtracts a C++ stamp from a Python one. M1 is
 `perf_counter_ns` differences inside the client; M2 and M3 are `steady_clock` differences inside the
@@ -394,8 +394,8 @@ on/off A/B commitment.
 
 ## 8. What the profile says
 
-Artifacts: an in-container perf capture (report, script, collapsed stacks, raw `perf.data` —
-retained offline), taken against the engine during a **tuned idle** run with
+Artifacts: `bench/results/20260730T051524Z/flame/` (`perf_report.txt`, `perf_script.txt`, `perf_collapsed.txt`,
+`perf.data`), captured in-container against the engine during a **tuned idle** run with
 `perf record -F 999 -e task-clock -g --call-graph dwarf,65528`. **1479 frames, 10 unknown (0.7%).**
 The profile predates the authoritative matrix but describes the same binary — the engine
 `sha256` in its manifests (`c5c5d4e0…`) is identical to §3's — so its attribution carries over.
@@ -462,13 +462,13 @@ paced/naive cell:
 | `paced_naive_R1` | 35 samples >5 ms clustered in 5 windows (peer median 4, threshold 20) | 679.3 | 2,206.6 |
 | `paced_naive_R6` | 29 samples >5 ms clustered in 3 windows | 643.6 | 2,054.2 |
 
-Both are retained with the published runs (offline). Two properties keep the exclusion honest. First,
+Both remain committed beside the published runs. Two properties keep the exclusion honest. First,
 the criteria are **latency-independent and pre-registered**: wall-clock and outlier clustering
 against siblings, calibrated on earlier matrices and falsified in both directions before this one
 ran — a repeat is excluded for being disturbed, not for its percentile. Second, and decisive:
 **the verdict does not depend on them.** With both excluded runs included, the paced naive p99.9
 band widens to 1,904.5–2,206.6 µs (spread 302.1 µs) — still a factor of six below the
-1,825.6 µs gap — and every clause of the revert criterion still passes. The audit keeps disturbed samples out of the
+1,825.6 µs gap — and every E-2 clause still passes. The audit keeps disturbed samples out of the
 published distributions; it does not manufacture the conclusion.
 
 **A correction to an earlier version of this section.** The previous draft, written from 3-repeat
@@ -487,11 +487,11 @@ clean runs was ≈12% per attempt). Re-rolling until lucky selects for near-thre
 that survives the audit; instead the protocol moved to 7 repeats, a discarded burn-in and
 per-repeat exclusion — decided and implemented **before** this matrix ran.
 
-**Stop-threshold disclosure.** The pre-registered stop condition is "tuned p50 > ~80 µs or inter-run p50 spread
+**E-4 disclosure.** The plan's E-4 stop condition is "tuned p50 > ~80 µs or inter-run p50 spread
 > ~20 µs", split by scenario scope as first recorded here:
 
-- **clause A — idle M1:** tuned p50 58.2 µs ≲ 80 and spread 1.4 µs ≲ 20 — **passes.**
-- **clause B — react tick-to-order:** 128.3 µs still trips the investigation clause, and the
+- **E-4a — idle M1:** tuned p50 58.2 µs ≲ 80 and spread 1.4 µs ≲ 20 — **passes.**
+- **E-4b — react tick-to-order:** 128.3 µs still trips the investigation clause, and the
   investigation stands: §5.5 decomposes M3 into venue production (~1 µs, unchanged) and
   delivery+reaction (where the entire 53.1 µs improvement sits), §5.4 bounds the engine's
   matching work at ~1 µs, and §8 places the engine's on-CPU time in the kernel. React's 128 µs
@@ -500,7 +500,7 @@ per-repeat exclusion — decided and implemented **before** this matrix ran.
 Tuned inter-run p50 spreads are 1.4 µs (idle), 3.6 µs (react) and 0.6 µs (paced), so the second
 clause trips nowhere.
 
-**No priced revert fires.** The pre-registered revert criterion's condition is that tuned *fails* to beat naive by
+**No priced revert fires.** E-2's condition for it is that tuned *fails* to beat naive by
 ≥5 µs p50 and ≥20 µs p99.9 with variation smaller than the gap. Tuned clears both thresholds in
 all three scenarios, the variation clause holds in all six comparisons, and every naive/tuned
 band pair is completely disjoint — the worst tuned paced p99.9 (203.8 µs) is better than the
@@ -521,10 +521,10 @@ docker run --rm --cpus 8 --memory 10g \
 
 # Any single table in §5, including the run-quality verdict:
 PYTHONPATH=bench .venv/bin/python -m harness.summarize \
-  --rtt run 20260730T220711Z/<run>.rtt.i64 \
-  --actual run 20260730T220711Z/<run>.actual.i64 \
-  --lag run 20260730T220711Z/<run>.lag.i64 \
-  --engine run 20260730T220711Z/<run>.engine.bench \
+  --rtt bench/results/20260730T220711Z/<run>.rtt.i64 \
+  --actual bench/results/20260730T220711Z/<run>.actual.i64 \
+  --lag bench/results/20260730T220711Z/<run>.lag.i64 \
+  --engine bench/results/20260730T220711Z/<run>.engine.bench \
   --warmup 10000 --require-samples 100000 --mode <idle|react|paced> --rate 1000 --md
 
 # The secondary probes carry a 20k floor, not 100k:
@@ -538,7 +538,7 @@ make perf
 ```
 
 `summarize` refuses rather than summarises when a run cannot back a table: below the sample floor,
-past a saturation threshold, on a truncated or fan-out engine dump, or when the primary gate
+past a saturation threshold, on a truncated or fan-out engine dump, or when the §5.2 primary gate
 is not met. A thin table reads exactly like a full one once it has been pasted somewhere else.
 
 ## 11. Honest limits
@@ -557,12 +557,12 @@ is not met. A thin table reads exactly like a full one once it has been pasted s
    the comparison is sound — but the absolute numbers describe the probe's reaction, not a
    production decision core.
 5. **Two paced/naive repeats are excluded by the peer audit** (§9). The criteria are
-   latency-independent and pre-registered, the excluded raw data is retained, and the verdict is
+   latency-independent and pre-registered, the excluded raw data is committed, and the verdict is
    unchanged with them included — but an exclusion is still a judgment call a reader should see.
 6. **Earlier matrices from this session are not published and should not be**: one leaked an
    engine per run (later runs measured against a growing background load, every dump empty), and
    three 3-repeat successors each lost at least one repeat to mid-run disturbance — the history
-   §9 recounts. The authoritative run in `run 20260730T220711Z` was taken after the
+   §9 recounts. The authoritative run in `bench/results/20260730T220711Z` was taken after the
    protocol hardened against both failure classes.
 
 ## Appendix A — macOS context numbers (NOT comparable)

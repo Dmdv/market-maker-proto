@@ -1,8 +1,8 @@
-// tests, session-lifetime part (lifecycle/state-machine cases live in
+// Task 3 tests, session-lifetime part (lifecycle/state-machine cases live in
 // test_engine.cpp, fill-rule cases in test_engine_fills.cpp, the allocation inventory in
 // test_engine_alloc.cpp; shared helpers in engine_test_support.hpp — split under the
 // 500-line file cap): everything that is about a SESSION rather than a single order —
-// per-session cl_id namespacing and cross-session isolation (A2 /), end_session's
+// per-session cl_id namespacing and cross-session isolation (A2 F-01/F-07), end_session's
 // CancelAcks and its destructive reap, the session-key range boundary at UINT64_MAX, and
 // the per-session entry cap policy signal.
 #include "engine_test_support.hpp"
@@ -18,7 +18,7 @@
 
 using namespace engine_test;
 
-TEST_CASE("engine: session scoping", "[engine]") {
+TEST_CASE("engine: session scoping (F-01/F-07)", "[engine]") {
   auto eng = primed_engine();
 
   SECTION("cl_id namespaces are per session: same cl_id on two sessions both accepted") {
@@ -76,8 +76,8 @@ TEST_CASE("engine: end_session emits one CancelAck per LIVE order only", "[engin
   SECTION("a live bid AND a live ask -> two acks, in (session, cl_id) key order") {
     // end_session's BATCHING is unfalsifiable with a single live order: acking only the first
     // live entry found, or only one side's orders, passes every other case in this file. The
-    // testing-spec quote loop holds exactly one of each, so this is also the shape the disconnect
-    // path actually meets in the demo.
+    // §7 quote loop holds exactly one of each, so this is also the shape the disconnect path
+    // actually meets in the demo.
     const auto bid =
         require_only<mm::OrderAck>(eng.on_new(kSessA, mk_new("a-bid", "B", 499990, 100)));
     const auto ask =
@@ -162,7 +162,7 @@ TEST_CASE("engine: the per-session entry cap is a policy signal", "[engine]") {
   // Tombstones are NOT gated by max_live_orders, so invalid orders mint entries at
   // frame rate; the cap bounds that growth. The engine keeps recording past the cap
   // (invariant 4 holds until the session dies) — the Server closes 1008 on breach
-  // (engine.hpp contract; the obligation is queued as the limitations backlog).
+  // (engine.hpp contract; the Task 7 obligation is queued as PENDING_AMENDMENTS (i)).
   auto eng = primed_engine(/*max_session_entries=*/3);
   CHECK_FALSE(eng.entry_cap_breached(kSessA));
 

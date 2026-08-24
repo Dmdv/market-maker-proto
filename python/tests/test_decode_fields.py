@@ -205,7 +205,7 @@ def test_both_arms_report_a_wrong_typed_string_in_the_same_words(token: bytes) -
 # The engine applies `detail::check_inbound_strings` to every inbound identifier; the
 # client applies the same policy to what the engine sends it, so the two ends of the wire
 # agree about what a string may be. Without it a peer could hand this client a 60 KB
-# `cl_id` (which the session layer stores, keyed, for the session) or a `reason` carrying a
+# `cl_id` (which Tasks 8/9 will store, keyed, for the session) or a `reason` carrying a
 # NUL and a CR/LF pair, straight into the client's logs — CWE-158/117/770, the class the
 # C++ side names and refuses.
 

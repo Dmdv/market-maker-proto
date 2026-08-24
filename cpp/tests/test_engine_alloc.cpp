@@ -1,13 +1,15 @@
-// tests, allocation part. Pins the engine's measured per-call allocation inventory
+// Task 3 tests, allocation part. Pins the engine's measured per-call allocation inventory
 // (normative record: the TU comment in cpp/src/engine.cpp) — the quantified exception to the
-// plan's zero-allocation constraint and the stated seed for the A/B allocation counter. Until
+// plan's zero-allocation constraint and the stated seed for the §6 allocation counter. Until
 // now that whole table was documentation only: re-adding a cl_id member to Order, or a lookup
 // that materializes a std::string key instead of using the transparent comparator, would break
-// every row and the A/B seed with a green suite.
+// every row and the §6 seed with a green suite.
 //
 // The counting/armed global `operator new` replacement these cases run on is a whole-binary
 // property, DEFINED exactly once in alloc_probe.cpp and armed through the RAII helpers in
-// alloc_probe_support.hpp.
+// alloc_probe_support.hpp (gate P1-R5: the probe moved out when this TU outgrew the repo's
+// 500-line file cap — the one-TU constraint is about the REPLACEMENT, not the cases that arm
+// it; the Outbox's allocation cases live in test_outbox_alloc.cpp on the same probe).
 // In-repo precedent for pinning an allocation contract: test_codec.cpp's encode-buffer-reuse
 // case.
 //
@@ -20,7 +22,7 @@
 // WHY THESE ROWS AND THESE LENGTHS. Exact counts are STDLIB-DEPENDENT wherever a string sits
 // near a small-string-optimization cliff: the host's libc++ holds 22 bytes locally, the
 // authoritative linux/arm64 container's libstdc++ 15, so an exact-equality pin taken at a
-// short cl_id would red the container run. Two kinds of row survive that difference
+// short cl_id would red the Task 12 container run. Two kinds of row survive that difference
 // and are pinned here:
 //   * ZERO rows — no allocation at all, on any stdlib.
 //   * rows measured with a cl_id and a reason LONGER THAN BOTH local capacities, where every
@@ -86,8 +88,8 @@ void inject_at_every_allocation(std::size_t expected_allocations, Setup setup, C
 using namespace engine_test;
 
 TEST_CASE("engine: on_book allocates NOTHING in its steady state", "[engine]") {
-  // The strongest row in the inventory and the one the benchmark/the A/B 100k-sample benchmarks
-  // lean on hardest: the M3 path is a no-fill sweep, and its empty result vector never allocates.
+  // The strongest row in the inventory and the one the §5.2/§6 100k-sample benchmarks lean
+  // on hardest: the M3 path is a no-fill sweep, and its empty result vector never allocates.
   // Stdlib-independent by construction — zero is zero.
   auto eng = primed_engine();
   require_only<mm::OrderAck>(eng.on_new(kSessA, mk_new(long_id('a'), "B", 400000, 100)));
@@ -108,7 +110,7 @@ TEST_CASE("engine: on_book allocates NOTHING in its steady state", "[engine]") {
 TEST_CASE("engine: the command paths allocate exactly their inventoried sources", "[engine]") {
   // Each row is measured on a session that has ALREADY sent a command, so the once-per-session
   // entries_by_session_ node is not in the figure — the declared STEADY-STATE basis of the
-  // inventory, which is what the A/B counter must be seeded from.
+  // inventory, which is what the §6 counter must be seeded from.
   auto eng = primed_engine();
   const auto warm = mk_new(long_id('w'), "B", 400000, 100);
   require_only<mm::OrderAck>(eng.on_new(kSessA, warm));
@@ -158,7 +160,7 @@ TEST_CASE("engine: the command paths allocate exactly their inventoried sources"
   SECTION("a session's FIRST command costs one MORE than the steady-state row") {
     // The rows above are all measured steady-state, and that basis is exactly what the
     // engine.cpp inventory DECLARES ("a session's FIRST command adds +1 to either on_new
-    // row") and what the A/B counter is seeded from. Without this section the +1 is
+    // row") and what the §6 counter is seeded from. Without this section the +1 is
     // unfalsifiable: moving or dropping the once-per-session entries_by_session_ node
     // would invalidate the declared basis with a green suite. Measured on kSessB, which
     // has sent nothing — the warm-up above touches kSessA only. Stdlib-independent for the
@@ -333,7 +335,7 @@ TEST_CASE("engine: a failed allocation in the sweep leaves the book replayable",
         const auto first = require_at<mm::Fill>(routed, 0);
         const auto second = require_at<mm::Fill>(routed, 1);
         CHECK(first.qty == 50);  // no leaves were stolen by the failed sweep
-        CHECK(second.qty == 50); // ... on either order (the book is exogenous)
+        CHECK(second.qty == 50); // ... on either order (the book is exogenous, F-30)
         CHECK(first.leaves == 0);
         CHECK(second.leaves == 0);
         CHECK(first.exec_id == 1); // and no exec_id was burned by it

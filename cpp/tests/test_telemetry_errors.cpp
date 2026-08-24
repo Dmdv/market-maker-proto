@@ -1,4 +1,4 @@
-// Telemetry tests: the telemetry writer's FAILURE paths — the third TU of the telemetry
+// Task 6.5 tests: the telemetry writer's FAILURE paths — the third TU of the telemetry
 // suite (seam map in telemetry_test_support.hpp). What this half PROMISES, each promise
 // its own falsifiable case: an unopenable output path and a non-positive poll interval
 // each fail construction loudly, before a thread exists — and before the stream opens,
@@ -255,7 +255,7 @@ TEST_CASE("telemetry: a mid-run IO failure latches, degrades to a no-op sink, an
 TEST_CASE("telemetry: an open-marker flush failure latches at construction and every drained "
           "record is a counted loss",
           "[telemetry]") {
-  // The first-flush window: the open marker is the stream's
+  // The first-flush window (terminal-gate codex S2): the open marker is the stream's
   // FIRST write+flush, made in the constructor. Unchecked, a writer born onto a dead
   // sink reported HEALTHY — output_failed() false, no stderr — while its first drained
   // batch was formatted into the already-failed stream ahead of drain()'s post-flush

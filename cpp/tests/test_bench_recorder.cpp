@@ -1,6 +1,6 @@
-// — BenchRecorder unit pins: the m0' attribution guard and
-// the first-echo-only rule,
-// plus the no-allocation-after-construction and dump-format contracts the benchmark harness
+// Task 7 — BenchRecorder unit pins: the m0' attribution guard (record A3 addendum) and
+// the first-echo-only rule (F-01: later echoes of a md_seq are pacing, not reaction),
+// plus the no-allocation-after-construction and dump-format contracts Task 11's harness
 // reads against.
 #include "mm/bench_recorder.hpp"
 
@@ -60,8 +60,10 @@ Dump read_dump(const std::filesystem::path &p) {
   return d;
 }
 
-// dump() takes an already-open stream. The unit file opens its own sink per call,
-// which is the same contract in miniature.
+// dump() takes an already-open stream (hard gate HG-2: the engine binds its bench
+// destination at startup so a mid-run pathname swap cannot redirect the truncating write
+// onto the telemetry file). The unit file opens its own sink per call, which is the same
+// contract in miniature.
 void dump_to(const mm::BenchRecorder &rec, const std::filesystem::path &path,
              std::uint64_t peak_sessions) {
   std::ofstream sink{path, std::ios::binary | std::ios::trunc};

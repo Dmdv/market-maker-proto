@@ -1,6 +1,6 @@
 """Cross-language golden contract: the C++ fixtures in ``tests/golden/`` ARE the wire.
 
-wrote those files and pins both C++ codec arms against them byte-for-byte. This
+Task 2 wrote those files and pins both C++ codec arms against them byte-for-byte. This
 module pins the Python side against the same bytes — the same files, read from the repo
 root, never a copy — so a wire-format change cannot land on one side of the boundary
 alone:

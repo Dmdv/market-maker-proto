@@ -1,6 +1,6 @@
 """What the strategy decides across a whole CONNECTION.
 
-The two counters and their very different readings, the lifecycle rules
+The two counters (08 F-10) and their very different readings, the lifecycle rules
 (connect / disconnect / stale feed / reconnect), and the determinism property the sans-IO
 split exists for. The per-message half is in ``test_strategy.py``; the shared fixtures are
 in ``strategy_support.py``.
@@ -293,7 +293,7 @@ def test_a_protocol_fatal_stop_still_pulls_resting_quotes() -> None:
     # fault. A second StopQuoting here reported "stale feed: N ns since the last book" for a
     # session whose books had been arriving, with an age measured from the fault rather than
     # from the feed: a fabricated diagnosis on the one channel that exists to distinguish
-    # causes, which the demo prints.
+    # causes, which Task 10's demo prints.
     cmds = s.on_timer(now_ns=10**6)
     assert [m.cl_id for m in sent(cmds)] == ["B-1", "S-1"]
 

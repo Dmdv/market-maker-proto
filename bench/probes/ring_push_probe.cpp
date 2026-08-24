@@ -24,7 +24,7 @@
 //               the shipped capacity/poll pair and the peak_pending ≈ factor x R x poll
 //               drain-lag factor.
 //
-// Measured (2026-07-29; host = Apple M3, Apple clang 21, arm64;
+// Measured, Task 6.5 gate P4-i1 (2026-07-29; host = Apple M3, Apple clang 21, arm64;
 // container = ubuntu:26.04 g++ 15.2, linux/arm64 on the same silicon; both -O3; figures
 // cited by cpp/include/mm/telemetry_ring.hpp — re-take rather than believe):
 //   push        ~2.2 ns (host) / ~6.3 ns (container) per L1-hot push+pop pair
@@ -239,7 +239,7 @@ void mode_notify() {
 
 void mode_granule() {
   // Load-then-store per side — the RING's own access shape (each end loads an index it
-  // then stores past; the drop counter is the same load+store ): the
+  // then stores past; the drop counter is the same load+store since gate P4-i1): the
   // load pulls the granule in, the store takes it exclusive, so sharing shows as
   // ping-pong. Two wrong instruments, observed flat and rejected: plain relaxed STORES
   // (store buffer absorbs them in bursts; 0.28 vs 0.27 ns) and relaxed fetch_add (this

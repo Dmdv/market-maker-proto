@@ -1,4 +1,4 @@
-// integration — the OUTBOX policy surface: TOB conflation against unbroken
+// Task 7 integration — the OUTBOX policy surface: TOB conflation against unbroken
 // envelope sequencing, the report-HWM 1008 and its drain, the protocol close that sheds
 // instead, and the M-class watermarks that must never relax. The shutdown half is in
 // test_server_shutdown.cpp and the durable-artifact half in test_server_artifacts.cpp;
@@ -31,7 +31,7 @@ TEST_CASE("server: burst conflates TOBs — md_seq gaps, envelope seq never does
     const json msg = client.read_json();
     REQUIRE(msg["t"] == "top_of_book");
     // The envelope sequence is CONTIGUOUS across the whole burst: conflation must gap
-    // only md_seq (stamp-at-pop).
+    // only md_seq (stamp-at-pop, F-06).
     CHECK(msg["seq"].get<std::uint64_t>() == expected_seq);
     ++expected_seq;
     tobs.push_back(msg);
@@ -55,7 +55,7 @@ TEST_CASE("server: burst conflates TOBs — md_seq gaps, envelope seq never does
   REQUIRE(live_conflated.has_value());
 
   // Both M-class watermarks, MID-session and on the final counters. telemetry.hpp declares
-  // them "maximum since construction, NEVER reset between snapshots" — reads them as
+  // them "maximum since construction, NEVER reset between snapshots" — Task 13 reads them as
   // queue-buildup evidence precisely because they cannot relax — and nothing in the suite
   // read either at server level: deleting each update outright left 161/161 green. This case
   // is where they are guaranteed non-zero, because the 1200 ms park against a 4 KiB socket
@@ -100,7 +100,7 @@ TEST_CASE("server: report-HWM flood closes 1008 after draining queued reports", 
   CHECK(code == 1008);
   // Every report the engine COUNTED reached the wire ahead of the close frame — the
   // policy closes loudly after the drain, never by shedding. Counted-vs-delivered is the
-  // only form that can fail on a shed: the envelope seq is stamped at POP time, so
+  // only form that can fail on a shed: the envelope seq is stamped at POP time (F-06), so
   // a report dropped before pop leaves no gap behind for a contiguity check to find.
   const auto counters = srv.counters_after_stop();
   const auto rejects = std::count_if(delivered.begin(), delivered.end(), [](const json &j) {
@@ -177,7 +177,7 @@ TEST_CASE("server: a policy close whose peer never answers still records 1008", 
   // the one-shot timeout first ("Deliver the timeout to the first caller",
   // stream_impl.hpp) — so it is the generic transport branch that records the code here.
   // The timeout branch's own closing_ arm is repaired but unreachable from the wire;
-  // the limitations backlog carries it with the seam that would falsify it.
+  // docs/PENDING_AMENDMENTS.md item (t)13 carries it with the seam that would falsify it.
   FeedFile feed{R"({"set":[500000,100,500010,80]})", R"({"halt_ms":3600000})"};
   mm::Config cfg;
   cfg.feed_path = feed.path().string();

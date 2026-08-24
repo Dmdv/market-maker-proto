@@ -1,6 +1,6 @@
-// Shared support for the telemetry test TUs (test_telemetry_writer.cpp outgrew
-// the 500-line file cap when the failure-path cases landed and again when
-// the a review wire batch landed; split along the same behavioral seams as the
+// Shared support for the Task 6.5 telemetry test TUs (test_telemetry_writer.cpp outgrew
+// the 500-line file cap when the failure-path cases landed at gate P1-R3, and again when
+// the gate P4-i1 wire batch landed; split along the same behavioral seams as the
 // codec/engine suites):
 //   test_telemetry.cpp        — the SPSC ring: FIFO, full-drop, pow2 rounding,
 //                               allocation-free steady state, the 1M threaded stress

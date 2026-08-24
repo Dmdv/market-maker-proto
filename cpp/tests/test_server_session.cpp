@@ -1,4 +1,4 @@
-// integration — the session command path, one message at a time: service acks and
+// Task 7 integration — the session command path, one message at a time: service acks and
 // the FIFO that pairs each measured svc_ns window with the command that cost it, report
 // ordering (reports before the TOB that caused them), inbound sequencing and its 1002s,
 // additive-key tolerance, and outbound seq contiguity. The EPOCH-scoped half — live-order
@@ -20,18 +20,6 @@ using namespace server_test;
 
 namespace {
 
-// svc stream of a --bench-out dump: six u64 header words, then header[0] int64 windows.
-std::vector<std::int64_t> read_svc_stream(const std::filesystem::path &p) {
-  std::ifstream in{p, std::ios::binary};
-  REQUIRE(in.is_open());
-  std::uint64_t header[6]{};
-  in.read(reinterpret_cast<char *>(header), sizeof header);
-  std::vector<std::int64_t> svc(header[0]);
-  in.read(reinterpret_cast<char *>(svc.data()), static_cast<std::streamsize>(svc.size() * 8));
-  REQUIRE(in.good());
-  return svc;
-}
-
 mm::Config heartbeat_config(const FeedFile &feed) {
   mm::Config cfg;
   cfg.feed_path = feed.path().string();
@@ -42,6 +30,20 @@ mm::Config heartbeat_config(const FeedFile &feed) {
 
 FeedFile heartbeat_feed() {
   return FeedFile{R"({"set":[500000,100,500010,80]})", R"({"halt_ms":100})"};
+}
+
+// The svc stream of a --bench-out dump: six u64 header words, then header[0] int64
+// windows in processing order (the full-format reader lives in test_bench_recorder.cpp;
+// this case needs only the first stream).
+std::vector<std::int64_t> read_svc_stream(const std::filesystem::path &p) {
+  std::ifstream in{p, std::ios::binary};
+  REQUIRE(in.is_open());
+  std::uint64_t header[6]{};
+  in.read(reinterpret_cast<char *>(header), sizeof header);
+  std::vector<std::int64_t> svc(header[0]);
+  in.read(reinterpret_cast<char *>(svc.data()), static_cast<std::streamsize>(svc.size() * 8));
+  REQUIRE(in.good());
+  return svc;
 }
 
 // Reads until a message of tag `t` arrives (TOB heartbeats interleave with reports).
@@ -76,8 +78,8 @@ TEST_CASE("server: each OrderAck carries the svc_ns of the command that COST it"
   // The case above reads svc_ns from a session with exactly ONE ack in flight, where the
   // FIFO that pairs each measured window with its ack holds one entry and its front and its
   // back are the same value — so it holds unchanged under a mispairing. svc_ns is the M2
-  // service window reported in the benchmark protocol: a mispairing corrupts a SCORED number while
-  // every wire assertion in this file stays green.
+  // service window reported in §5.2: a mispairing corrupts a SCORED number while every
+  // wire assertion in this file stays green.
   //
   // Two acks must therefore be queued before EITHER is popped, and that needs the write
   // loop already stalled: the pop that stamps svc_ns otherwise runs on the same event-loop
@@ -91,7 +93,8 @@ TEST_CASE("server: each OrderAck carries the svc_ns of the command that COST it"
   cfg.loop_feed = false;    // one book then silence: only this case's own reports move
   cfg.report_hwm = 100'000; // out of the way — the stall is the subject, not a policy close
   cfg.so_sndbuf = 4096;
-  // The recorder is the pairing oracle: same value, same order, as the acks' svc_ns.
+  // The recorder is the pairing oracle (see the pin at the end): its svc stream and the
+  // acks' svc_ns are written from the same computed value, in processing order.
   telemetry_test::TempPath bench_path{"svcpair"};
   cfg.bench_out = bench_path.path().string();
   ServerRunner srv{cfg};
@@ -108,8 +111,21 @@ TEST_CASE("server: each OrderAck carries the svc_ns of the command that COST it"
   for (std::uint64_t i = 1; i <= 5000; ++i)
     client.send_text(cancel_order(i, 1, "nobody-" + std::to_string(i)));
 
-  // Both orders land behind the stall (the client never reads). The pairing pin below is
-  // timing-free: ack svc_ns and the recorder's svc stream are the same int64, written once.
+  // Both orders land behind that stall — the client is the only reader and it has not read,
+  // so nothing can leave the socket between these two sends.
+  //
+  // HISTORY of the discriminator, because its predecessor died silently: this case used to
+  // pad the first order with ~60 KB and assert padded_svc > plain_svc, on the premise that
+  // the preflight scan sat INSIDE the measured window. The M2 boundary correction (e1 is
+  // stamped AFTER decode — session.cpp on_message) moved that scan out of the window, and
+  // the comparison decayed into a coin toss biased only by scheduler noise: it then failed
+  // twice on loaded CI runners, once under asan and once under rel, same assertion. The
+  // pairing pin below is TIMING-FREE instead: the ack's svc_ns and the BenchRecorder's svc
+  // stream are the same int64 written at the same line (on_command computes `svc` once,
+  // then rec->svc(svc) and pending_svc_.push_back(svc)), so each ack must carry EXACTLY
+  // the recorder's value at its own position — a FIFO reversal miswires the values unless
+  // the two windows happen to collide to the nanosecond, in which case the scored number
+  // is identical under either mapping and no corruption is expressible at all.
   client.send_text(new_order(5001, 1, "svc-first", 499990, 100));
   client.send_text(new_order(5002, 1, "svc-second", 499990, 100));
 
@@ -123,13 +139,18 @@ TEST_CASE("server: each OrderAck carries the svc_ns of the command that COST it"
   CHECK(first_ack["svc_ns"].get<std::int64_t>() > 0);
   CHECK(second_ack["svc_ns"].get<std::int64_t>() > 0);
 
-  // Precondition asserted, not assumed: without a stalled writer the two acks never
-  // coexist and the pairing is unobservable.
+  // The PRECONDITION, asserted rather than assumed: without a stalled writer the two acks
+  // never coexist in the queue and the pairing is unobservable — a green case pinning
+  // nothing. A writer that keeps up holds a depth of 1; two orders of magnitude above that
+  // is the stall itself, and the floor sits well under the ~700 the sizing above predicts
+  // so it fails on the STALL rather than on a host's buffer arithmetic.
   const auto counters = srv.counters_after_stop();
   CHECK(counters.outbox_depth_hw >= 100);
 
-  // The dump's last two svc entries are the two orders' windows — each ack must carry
-  // its own, value-identically; a FIFO reversal breaks the equality.
+  // The pairing pin: the dump's svc stream is written in processing order (single owner
+  // thread), the 1000 reject-only cancels contribute their own windows ahead of the two
+  // orders, so the LAST TWO entries are the two orders' windows — and each ack must carry
+  // its own, value-identically.
   const std::vector<std::int64_t> svc = read_svc_stream(bench_path.path());
   REQUIRE(svc.size() >= 2);
   CHECK(first_ack["svc_ns"].get<std::int64_t>() == svc[svc.size() - 2]);
@@ -368,7 +389,7 @@ TEST_CASE("server: outbound envelope seq is contiguous across rejects, acks, can
 
 TEST_CASE("server: reject narration is bounded by the snapshot cadence, not by the peer",
           "[server]") {
-  // review findings. The coalescing landed against a MEASURED
+  // Task 7 gate G-B, findings GB-3/GB-4. The coalescing landed in Phase 4 against a MEASURED
   // amplification — 121,600 malformed frames drew 3.6 MB of telemetry, 4.24x the bytes the
   // peer sent, at the CLIENT's rate — but nothing asserted the bound, so an unbounded emit
   // and a one-shot latch that silences every LATER code both passed the whole suite. The two

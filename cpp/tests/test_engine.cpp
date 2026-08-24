@@ -1,9 +1,9 @@
-// tests, lifecycle/state-machine part (session-lifetime cases live in
+// Task 3 tests, lifecycle/state-machine part (session-lifetime cases live in
 // test_engine_session.cpp, fill-rule cases in test_engine_fills.cpp, the allocation
 // inventory in test_engine_alloc.cpp; shared helpers in engine_test_support.hpp — split
-// under the 500-line file cap). One section per the order-lifecycle spec "Order lifecycle" row
-// (new, duplicate ID, reject, cancel, re-quote), plus the Rejected-tombstone and
-// constructor-validation contracts, both reject-reason matrices, and the determinism
+// under the 500-line file cap). One section per assignment §7 "Order lifecycle" row (new,
+// duplicate ID, reject, cancel, re-quote), plus the Rejected-tombstone and
+// constructor-validation contracts, both reject-reason matrices, and the §9 determinism
 // byte-pin.
 //
 // Unit conventions (types.hpp boundary rule): tests speak RAW wire units (px multiple of
@@ -35,7 +35,7 @@ TEST_CASE("engine: new order is acked live", "[engine]") {
   CHECK(ack.eng_id == 1);
   CHECK(ack.status == "live");
   // The engine has no clock and NEVER stamps a service time — the Server does, at send time
-  // . Asserted here so an engine that started fabricating a latency number would be
+  // (Task 7). Asserted here so an engine that started fabricating a latency number would be
   // caught engine-side; the field default-initializes to 0, so this pins the contract, not
   // the assignment.
   CHECK(ack.svc_ns == 0);
@@ -143,7 +143,7 @@ TEST_CASE("engine: max_live_orders is PER SESSION (R-1)", "[engine]") {
   CHECK(eng.live_count(kSessA) == 2);
 
   // A valid order on session B while A holds two: limits are independent per connection
-  // (the cross-session test depends on this).
+  // (the Task 7 cross-session test depends on this).
   require_only<mm::OrderAck>(eng.on_new(kSessB, mk_new("b1", "B", 499990, 100)));
   CHECK(eng.live_count(kSessB) == 1);
 }
@@ -152,7 +152,7 @@ TEST_CASE("engine: the max_live cap is SHARED across the two sides", "[engine]")
   // One bid plus one ask exhaust a cap of 2: the limit counts a SESSION's live orders, not a
   // side's (live_count sums both live indexes). The bid-only cases above cannot tell the two
   // readings apart, and a per-side cap would quietly let a session hold 2x max_live_orders —
-  // the testing-spec quote loop holds exactly one of each, so it would never notice either.
+  // the §7 quote loop holds exactly one of each, so it would never notice either.
   auto eng = primed_engine();
   require_only<mm::OrderAck>(eng.on_new(kSessA, mk_new("b1", "B", 499990, 100)));
   require_only<mm::OrderAck>(eng.on_new(kSessA, mk_new("s1", "S", 500020, 100)));
@@ -168,10 +168,9 @@ TEST_CASE("engine: the max_live cap is SHARED across the two sides", "[engine]")
   CHECK(eng.live_count(kSessA) == 2);
 }
 
-TEST_CASE("engine: a cancel frees a max_live slot — the testing-spec re-quote transition",
-          "[engine]") {
+TEST_CASE("engine: a cancel frees a max_live slot — the §7 re-quote transition", "[engine]") {
   // The MM loop is quote -> cancel -> re-quote: a cancel MUST free its max_live_orders
-  // slot or the whole seven-step demo stalls after two orders.
+  // slot or the whole §4 demo stalls after two orders.
   auto eng = primed_engine();
   require_only<mm::OrderAck>(eng.on_new(kSessA, mk_new("q1", "B", 499990, 100)));
   require_only<mm::OrderAck>(eng.on_new(kSessA, mk_new("q2", "B", 499985, 100)));
@@ -274,8 +273,8 @@ TEST_CASE("engine: constructor rejects a nonsensical configuration", "[engine]")
   CHECK_THROWS_AS(mm::OrderEngine{bad_tick}, std::invalid_argument);
   // Same fail-loudly policy: a negative max_live_orders would silently reject every
   // order, and max_session_entries == 0 would flag entry_cap_breached for a session
-  // that has never sent anything (an instant 1008 close under the obligation,
-  // the limitations backlog).
+  // that has never sent anything (an instant 1008 close under the Task 7 obligation,
+  // PENDING_AMENDMENTS (i)).
   mm::Instrument neg_live = spec_instrument();
   neg_live.max_live_orders = -3;
   CHECK_THROWS_AS(mm::OrderEngine{neg_live}, std::invalid_argument);
@@ -292,7 +291,7 @@ TEST_CASE("engine: constructor rejects a nonsensical configuration", "[engine]")
                   std::invalid_argument);
 }
 
-TEST_CASE("engine: on_new walks the full safety-control validation reject matrix", "[engine]") {
+TEST_CASE("engine: on_new walks the full §2.3 validation reject matrix", "[engine]") {
   // Engine-path coverage of every validate_order code (types.hpp covers the function
   // directly, this pins the on_new wiring).
   auto eng = primed_engine();
@@ -383,7 +382,7 @@ TEST_CASE("engine: on_new walks the full safety-control validation reject matrix
 }
 
 TEST_CASE("engine: the five engine-originated rejects pin their reason too", "[engine]") {
-  // Mirror of the validation matrix above, for the codes on_new/on_cancel raise
+  // Mirror of the §2.3 validation matrix above, for the codes on_new/on_cancel raise
   // THEMSELVES rather than via validate_order. Same rationale, which applies verbatim here:
   // Reject.reason is the client's only human-readable explanation, and asserting the code
   // alone leaves it free to degrade silently (blanking any of the five reasons was a mutant
@@ -406,8 +405,8 @@ TEST_CASE("engine: the five engine-originated rejects pin their reason too", "[e
 }
 
 TEST_CASE("engine: determinism — same commands, byte-identical reports", "[engine]") {
-  // The acceptance list names five conditions the state must stay deterministic under: rejects,
-  // fills, cancels, STALE DATA and disconnect. The script drives all five — the replayed and
+  // §9 names five conditions the state must stay deterministic under: rejects, fills,
+  // cancels, STALE DATA and disconnect. The script drives all five — the replayed and
   // rewound books below are the stale-data arm, and this task is the one that introduced
   // engine behavior for it (the md_seq guard and its counter).
   struct Run {
@@ -442,7 +441,7 @@ TEST_CASE("engine: determinism — same commands, byte-identical reports", "[eng
       emit(routed.msg); // partial fill of c1@A, fills c1@B
     // STALE DATA arm: a redelivered md_seq 2 and a rewind to md_seq 1. Both must emit
     // nothing, leave `leaves` untouched and count one drop each — so the byte-pin covers a
-    // condition the acceptance list names and the counter it feeds.
+    // condition §9 names and the counter it feeds.
     for (const auto &routed : eng.on_book(mk_book(499990, 100, 499995, 40, 2)))
       emit(routed.msg);
     for (const auto &routed : eng.on_book(base_book(1)))
