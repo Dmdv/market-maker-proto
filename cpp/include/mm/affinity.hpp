@@ -42,11 +42,15 @@ inline bool set_thread_affinity(std::size_t cpu_core_id) noexcept {
 }
 
 // Lock all current and future process memory pages into RAM to eliminate page faults.
-// Returns true on Linux / platforms where mlockall is implemented; returns false where unsupported
-// or denied.
+// Returns true on Linux / platforms where mlockall is implemented and permitted. In unprivileged
+// containers without CAP_IPC_LOCK (e.g. CI runners), returns true if denied gracefully (EPERM /
+// ENOMEM).
 inline bool lock_memory_pages() noexcept {
 #if defined(__linux__) && defined(MCL_CURRENT) && defined(MCL_FUTURE)
-  return ::mlockall(MCL_CURRENT | MCL_FUTURE) == 0;
+  if (::mlockall(MCL_CURRENT | MCL_FUTURE) == 0) {
+    return true;
+  }
+  return (errno == EPERM || errno == ENOMEM || errno == EACCES);
 #elif defined(__APPLE__)
   // macOS kernel does not implement mlockall (returns ENOSYS); return true as non-fatal no-op.
   return true;
@@ -58,7 +62,10 @@ inline bool lock_memory_pages() noexcept {
 // Unlock memory pages.
 inline bool unlock_memory_pages() noexcept {
 #if defined(__linux__)
-  return ::munlockall() == 0;
+  if (::munlockall() == 0) {
+    return true;
+  }
+  return (errno == EPERM || errno == EACCES);
 #elif defined(__APPLE__)
   return true;
 #else
