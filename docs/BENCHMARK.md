@@ -550,6 +550,8 @@ Beyond the dual-stack WebSocket measurement (Stages 1 & 2), the project implemen
 | **3. Zero-Copy SHM IPC** | Dual SPSC Shared Memory Ring (`mmap`) | Python Sans-IO `Strategy` + 64B Flat Structs | **2.10 µs** | 1.85 µs | 18.67 µs | **96.3× Speedup** |
 | **4. Direct Native C++20** | In-Memory Direct Call | C++20 `NativeMarketMaker` + ARM NEON SIMD | **0.29 µs** (291 ns) | 0.25 µs (250 ns) | 2.88 µs | **695.2× Speedup** |
 
+![Order Execution & Latency Profiling Chart](assets/order_flow_profiling.png)
+
 ---
 
 ### 10.2 Lock-Free SPSC Shared Memory IPC Probe (`shm_rtt_probe`)
