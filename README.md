@@ -110,6 +110,23 @@ Measured with verified sub-nanosecond hardware clock synchronization (`CLOCK_MON
 
 ---
 
+### 📈 Order Flow Execution & Latency Profiling Chart
+
+![Market Maker Order Lifecycle & Spread Profiling](docs/assets/order_flow_profiling.png)
+
+The profiling chart above illustrates:
+1. **Market Dynamics & Quoting Lifecycle:** Dynamic Top-of-Book spread tracking, maker post-only quoting, and amend cycles as market moves.
+2. **Deterministic Fill & Inventory Management:** Order execution on crossing ticks and immediate inventory re-balancing ($q(t)$ contained within risk limits).
+3. **Nanosecond Path Breakdown:** Zero-Copy SHM transport and C++ engine matching execution timings.
+4. **4-Tier Architecture Latency Speedup:** Systematic reduction from $202.3\,\mu\text{s}$ (Naive WS) down to $291\,\text{ns}$ (Native C++).
+
+> **To re-generate the profiling chart locally:**
+> ```bash
+> python3 bench/probes/profile_orders.py
+> ```
+
+---
+
 ## Measurement model
 
 Three intervals, each entirely inside one process — no cross-process clock arithmetic:
