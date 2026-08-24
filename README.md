@@ -279,6 +279,12 @@ PYTHONPATH=bench .venv/bin/python -m harness.summarize \
   --warmup 10000 --require-samples 100000 --mode <idle|react|paced> --rate 1000 --md
 
 scripts/profile.sh   # the in-container flamegraph
+
+# Ultra-Low Latency & Microsecond Benchmark Probes:
+./build/rel/shm_rtt_probe 100000         # Zero-Copy SPSC Shared Memory IPC RTT probe
+./build/rel/one_way_decomp_probe 100000  # Nanosecond Ingress/Egress/Matching breakdown
+./build/rel/simd_pricing_probe 10000000  # ARM NEON / AVX-512 Vectorized depth pricing
+./build/rel/native_mm_probe 100000       # Direct Native C++20 End-to-End Tick-to-Order probe
 ```
 
 ### CI
