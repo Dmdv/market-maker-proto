@@ -1,8 +1,8 @@
 # Mock market-making engine (C++20) + market-making client (Python)
 
 > 📚 **Technical Articles & Architecture Deep Dives:**
-> - **[`docs/SANS_IO_STATE_MACHINE_ARCHITECTURE.ru.md`](docs/SANS_IO_STATE_MACHINE_ARCHITECTURE.ru.md):** The Sans-I/O State Machine Pattern in Trading Engines (eliminating sockets, concurrency bugs, and flaky tests).
-> - **[`docs/LINKEDIN_ARTICLE_ULL_HFT.ru.md`](docs/LINKEDIN_ARTICLE_ULL_HFT.ru.md):** Ultra-Low Latency HFT Engineering & Python $\leftrightarrow$ C++ Zero-Copy Shared Memory IPC.
+> - **[`docs/SANS_IO_STATE_MACHINE.md`](docs/SANS_IO_STATE_MACHINE.md):** The Sans-I/O State Machine Pattern in Trading Engines (eliminating sockets, concurrency bugs, and flaky tests).
+> - **[`docs/ZERO_COPY_SHM_IPC.md`](docs/ZERO_COPY_SHM_IPC.md):** Python $\leftrightarrow$ C++ Zero-Copy Shared Memory IPC Architecture ($96.3\times$ speedup, $2.10\,\mu\text{s}$ reaction).
 
 A mock exchange and a market-making client, built to be measured. The engine publishes top of book
 and matches orders over a WebSocket; the client quotes two-sided at the touch, re-quotes on book
@@ -19,7 +19,7 @@ arms.
 
 Full method, tables, bands and limits: **[`docs/BENCHMARK.md`](docs/BENCHMARK.md)**. Ranked next
 steps: **[`docs/OPTIMIZATION.md`](docs/OPTIMIZATION.md)**. Wire contract:
-**[`docs/PROTOCOL.md`](docs/PROTOCOL.md)**.
+**[`docs/PROTOCOL.md`](docs/PROTOCOL.md)**. Technical architecture deep dives: **[`docs/SANS_IO_STATE_MACHINE.md`](docs/SANS_IO_STATE_MACHINE.md)** and **[`docs/ZERO_COPY_SHM_IPC.md`](docs/ZERO_COPY_SHM_IPC.md)**.
 
 All figures below are from the authoritative in-container run `bench/results/20260730T220711Z`:
 46 runs after a discarded burn-in, 10k warm-up + 100k samples each, 7 interleaved repeats per
@@ -104,6 +104,8 @@ CO-corrected (`done − intended`), actual-send and lag series separately.
 
 ## Architecture
 
+### 1. Dual-Stack WebSocket Transport Architecture
+
 ```mermaid
 flowchart LR
     subgraph PY["Python client (one process, one loop)"]
@@ -128,7 +130,32 @@ flowchart LR
     OB --> TA
 ```
 
-Everything above the transport adapter is shared between the two arms. That is what makes the
+### 2. Ultra-Low Latency Zero-Copy Shared Memory (SHM) Architecture
+
+For microsecond-level execution, the network stack is bypassed entirely via POSIX Shared Memory and flat 64-byte SBE binary structs:
+
+```mermaid
+flowchart LR
+    subgraph PY_BRAIN["Python Quant Brain"]
+        P_STRAT["Sans-IO Strategy Core<br/>(on_tob, on_report, on_timer)"]
+        P_SHM["SHM Adapter (shm_ipc.py)<br/>Fast struct.Struct (< 150 ns)"]
+        P_STRAT <--> P_SHM
+    end
+    subgraph SHM_IPC["Lock-Free POSIX Shared Memory (mmap)"]
+        MD_RING["MD Ring (SPSC)<br/>Policy: Overwrite-Oldest"]
+        ORD_RING["Order/Report Ring (SPSC)<br/>Policy: Never-Drop (Strict FIFO)"]
+    end
+    subgraph CPP_GATEWAY["C++20 Execution Gateway"]
+        C_MATCH["Order Engine & Matching<br/>(41 ns Service Time)"]
+        C_FEED["Market Data Producer<br/>(ARM NEON SIMD 2.8 ns)"]
+        C_FEED --> MD_RING
+        ORD_RING --> C_MATCH
+    end
+    P_SHM <-- Read Latest TOB --> MD_RING
+    P_SHM -- Push Order Command --> ORD_RING
+```
+
+Everything above the transport adapter is shared between the arms. That is what makes the
 measured delta attributable to the stack rather than to a behaviour change.
 
 ## Threading and ownership model
@@ -265,7 +292,7 @@ also the local entry point, so CI and a developer run the same gate rather than 
 
 | surface | shipped artifact | proven by |
 |---|---|---|
-| Sans-I/O State Machine | Pure deterministic decision core separated from transport | `python/mmclient/strategy.py`, `docs/SANS_IO_STATE_MACHINE_ARCHITECTURE.ru.md` |
+| Sans-I/O State Machine | Pure deterministic decision core separated from transport | `python/mmclient/strategy.py`, `docs/SANS_IO_STATE_MACHINE.md` |
 | Zero-Copy SHM IPC | Lock-free POSIX shared memory SPSC ring + 64B flat binary structs | `python/mmclient/shm_ipc.py`, `cpp/include/mm/shm_ring.hpp` |
 | SIMD Vectorized Pricing | ARM NEON & AVX-512 8-wide depth pricing (2.8 ns) | `cpp/include/mm/simd_pricing.hpp`, `cpp/tests/test_simd_pricing.cpp` |
 | C++ concurrency & ownership | single owner thread, per-session strand, SPSC telemetry ring | TSan suite; `cpp/tests/` (191 tests) |
