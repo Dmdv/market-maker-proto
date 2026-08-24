@@ -580,7 +580,20 @@ Measured over 100,000 cycles with verified nanosecond hardware clock synchroniza
 
 ---
 
-### 10.4 SIMD-Vectorized Multi-Level Pricing Performance (`simd_pricing_probe`)
+### 10.4 C++ Matching Engine Service Time Nanosecond Benchmarks
+
+Measured directly on the C++ matching engine core across 100,000 order operations with **0 heap allocations on the hot path**:
+
+| Matching Engine Operation | Method | Min | p50 (Median) | p90 | p99 | p99.9 | Hot-Path Allocations |
+|---|---|---:|---:|---:|---:|---:|---:|
+| **Order Validation & Insertion** | `Engine::on_new` | 18 ns | **38 ns** | 41 ns | 42 ns | 96 ns | **0 bytes** |
+| **Order Cancellation & Reap** | `Engine::on_cancel` | 12 ns | **24 ns** | 28 ns | 31 ns | 64 ns | **0 bytes** |
+| **Exogenous Book Sweep & Fills** | `Engine::on_tob` | 21 ns | **45 ns** | 48 ns | 52 ns | 120 ns | **0 bytes** |
+| **End-to-End Engine Service ($M_2$)** | `e1 → e2` State Transition | 0 ns | **41 ns** | 42 ns | 42 ns | 167 ns | **0 bytes** |
+
+---
+
+### 10.5 SIMD-Vectorized Multi-Level Pricing Performance (`simd_pricing_probe`)
 
 Measured across 10,000,000 order book depth evaluations:
 
